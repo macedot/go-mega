@@ -18,6 +18,7 @@ services:
       - APP_SECRET=${APP_SECRET:-dev-secret-change-in-production}
       - STORAGE_PATH=/app/storage
       - HOST=${HOST:-localhost:8080}
+      - USER_DISK_QUOTA_BYTES=${USER_DISK_QUOTA_BYTES:-5368709120}
       # Add for Cloudflare Tunnel (optional even in dev):
       # - WEBAUTHN_ORIGIN=https://yourhost.example.com
       # - WEBAUTHN_RP_ID=yourhost.example.com

@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/macedot/go-mega/internal/config"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -58,8 +59,11 @@ func (u *User) DiskQuota() int64 {
 	if u.DiskQuotaBytes != nil && *u.DiskQuotaBytes > 0 {
 		return *u.DiskQuotaBytes
 	}
-	// Fallback to config default - caller should inject or use global
-	return 5 * 1024 * 1024 * 1024 // 5GB default if no config
+	if config.Cfg != nil {
+		return config.Cfg.Security.DefaultDiskQuotaBytes
+	}
+	// Fallback (should only happen in tests before config.Load)
+	return 5 * 1024 * 1024 * 1024 // 5GB
 }
 
 func (u *User) StorageRemaining(db *sql.DB) (int64, error) {
@@ -76,14 +80,15 @@ func (u *User) StorageRemaining(db *sql.DB) (int64, error) {
 }
 
 func (u *User) CanUpload(db *sql.DB, fileSize int64) (bool, error) {
-	// grace is applied in caller or here
 	used, err := u.StorageUsed(db)
 	if err != nil {
 		return false, err
 	}
 	quota := u.DiskQuota()
-	// default grace 100MB
 	grace := int64(100 * 1024 * 1024)
+	if config.Cfg != nil {
+		grace = config.Cfg.Security.DiskQuotaGraceBytes
+	}
 	return (used + fileSize) <= (quota + grace), nil
 }
 
