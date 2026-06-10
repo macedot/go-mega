@@ -41,11 +41,12 @@
         </div>
       </div>
 
-      {{ if .Error }}
-      <div class="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 text-sm text-red-700">{{ .Error }}</div>
-      {{ end }}
+      <div id="upload-error"
+           class="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 text-sm text-red-700 {{ if not .Error }}hidden{{ end }}">
+        {{ if .Error }}{{ .Error }}{{ end }}
+      </div>
 
-      <form method="post" action="/uploads" enctype="multipart/form-data" id="upload-form" class="space-y-6">
+      <form method="post" action="/uploads" enctype="multipart/form-data" id="upload-form" class="space-y-6" data-max-upload="{{ .MaxUpload }}">
         <!-- Drop zone -->
         <div id="dropzone"
              class="dropzone border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-2xl p-10 text-center cursor-pointer hover:border-red-400"
@@ -55,6 +56,17 @@
           <p class="text-[11px] text-zinc-500 mt-1">Max {{ humanSize .MaxUpload }}</p>
           <input type="file" id="file-input" name="file" class="hidden" required>
           <div id="preview" class="hidden mt-4 text-left bg-zinc-100 dark:bg-zinc-800 p-3 rounded text-sm"></div>
+
+          <!-- Upload progress (populated by JS during XHR send) -->
+          <div id="upload-progress" class="hidden mt-4">
+            <div class="w-full bg-zinc-200 dark:bg-zinc-700 rounded-full h-2 overflow-hidden">
+              <div id="upload-progress-bar"
+                   class="bg-red-600 h-2 rounded-full transition-all duration-100"
+                   style="width: 0%"></div>
+            </div>
+            <p id="upload-progress-text"
+               class="text-sm text-zinc-500 dark:text-zinc-400 mt-1">Uploading...</p>
+          </div>
         </div>
 
         <div class="grid grid-cols-2 gap-4">
@@ -68,7 +80,7 @@
           </div>
         </div>
 
-        <button type="submit" class="w-full py-3.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-semibold active:scale-[0.985] transition">Upload &amp; generate link</button>
+        <button id="upload-submit" type="submit" class="w-full py-3.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-semibold active:scale-[0.985] transition disabled:opacity-60">Upload &amp; generate link</button>
       </form>
     </div>
 
@@ -114,11 +126,31 @@
     const dz = document.getElementById('dropzone');
     const input = document.getElementById('file-input');
     const preview = document.getElementById('preview');
+    const form = document.getElementById('upload-form');
+    const progress = document.getElementById('upload-progress');
+    const bar = document.getElementById('upload-progress-bar');
+    const text = document.getElementById('upload-progress-text');
+    const uploadError = document.getElementById('upload-error');
+    const submitBtn = document.getElementById('upload-submit');
 
     function showPreview(file) {
       preview.classList.remove('hidden');
       preview.innerHTML = `<strong>${file.name}</strong><br><span class="text-xs text-zinc-500">${(file.size/1024/1024).toFixed(2)} MB</span>`;
+      // reset any previous upload state when a new file is chosen
+      if (progress) progress.classList.add('hidden');
+      if (bar) bar.style.width = '0%';
+      if (text) text.textContent = 'Uploading...';
+      if (uploadError) uploadError.classList.add('hidden');
+      if (submitBtn) submitBtn.disabled = false;
     }
+
+    function resetUploadUI() {
+      if (progress) progress.classList.add('hidden');
+      if (bar) bar.style.width = '0%';
+      if (text) text.textContent = 'Uploading...';
+      if (submitBtn) submitBtn.disabled = false;
+    }
+
     input.onchange = () => { if (input.files[0]) showPreview(input.files[0]); };
     dz.ondragover = e => { e.preventDefault(); dz.classList.add('dragover'); };
     dz.ondragleave = () => dz.classList.remove('dragover');
@@ -129,6 +161,78 @@
         showPreview(e.dataTransfer.files[0]);
       }
     };
+
+    // Proper upload progress via XHR (works for the current direct multipart upload)
+    if (form) {
+      form.addEventListener('submit', function (e) {
+        const file = input.files && input.files[0];
+        if (!file) return; // let the browser's required validation kick in
+
+        e.preventDefault();
+
+        // hide previous errors and show progress UI
+        if (uploadError) uploadError.classList.add('hidden');
+        if (progress) progress.classList.remove('hidden');
+        if (bar) bar.style.width = '0%';
+        if (text) text.textContent = 'Uploading 0%';
+        if (submitBtn) submitBtn.disabled = true;
+
+        const formData = new FormData(form);
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', form.action, true);
+
+        xhr.upload.onprogress = function (evt) {
+          if (evt.lengthComputable && bar && text) {
+            const pct = Math.round((evt.loaded / evt.total) * 100);
+            bar.style.width = pct + '%';
+            text.textContent = 'Uploading ' + pct + '%';
+            if (pct >= 100 && text) {
+              text.textContent = 'Processing...';
+            }
+          }
+        };
+
+        xhr.onload = function () {
+          if (xhr.status >= 200 && xhr.status < 400) {
+            // success (server does 303 redirect on OK). Go to the uploads list
+            // so the new share appears in the active files section.
+            window.location.href = '/uploads/new';
+          } else {
+            // error: server returned 422 + the form HTML with the error message.
+            // Try to extract the error text so we don't lose the message.
+            let msg = 'Upload failed. Please try again.';
+            try {
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(xhr.responseText || '', 'text/html');
+              const errEl = doc.getElementById('upload-error') || doc.querySelector('.bg-red-50');
+              if (errEl && errEl.textContent) {
+                msg = errEl.textContent.trim();
+              }
+            } catch (_) {}
+
+            if (uploadError) {
+              uploadError.textContent = msg;
+              uploadError.classList.remove('hidden');
+            } else {
+              alert(msg);
+            }
+            resetUploadUI();
+          }
+        };
+
+        xhr.onerror = function () {
+          if (uploadError) {
+            uploadError.textContent = 'Network error during upload.';
+            uploadError.classList.remove('hidden');
+          } else {
+            alert('Network error during upload.');
+          }
+          resetUploadUI();
+        };
+
+        xhr.send(formData);
+      });
+    }
   </script>
 </body>
 </html>
