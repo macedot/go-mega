@@ -5,6 +5,14 @@ services:
     # Production: use the pre-built image from GitHub Container Registry.
     # See https://github.com/macedot/go-mega/pkgs/container/go-mega
     image: ghcr.io/macedot/go-mega:latest
+
+    # The container runs as nonroot (UID 65532) by default in the image.
+    # Named volumes are created with root ownership. Running as root here
+    # ensures the app can create/write the SQLite database on first start.
+    # If you prefer non-root, use a bind mount and `chown 65532:65532` the
+    # host directory, or run: docker compose run --rm -u 0 web true
+    user: "0:0"
+
     restart: unless-stopped
     environment:
       - APP_ENV=production

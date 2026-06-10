@@ -6,6 +6,11 @@ services:
     # Use this for testing changes without pushing to GHCR.
     build: .
     image: go-mega:dev
+
+    # Same note as production: named volume + nonroot can cause "unable to open database file".
+    # Running as root makes first-start initialization easy.
+    user: "0:0"
+
     restart: unless-stopped
     environment:
       - APP_ENV=development
