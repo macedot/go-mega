@@ -1,60 +1,68 @@
-# Binaries
-*.exe
-*.exe~
-*.dll
-*.so
-*.dylib
-/server
-go-mega
+# =============================================================================
+# WHITELIST .gitignore
+# Deny everything by default, then explicitly allow only what should be
+# committed to the repository.
+# =============================================================================
 
-# Test binary
-*.test
+# Deny all files and directories by default
+*
 
-# Coverage
-*.out
-coverage.*
+# Re-allow directories (required so that we can selectively include files
+# inside specific directories later)
+!*/
 
-# Go workspace
-go.work
-go.work.sum
+# =============================================================================
+# Explicitly allowed content (everything else stays ignored)
+# =============================================================================
 
-# Local data / runtime (recreated on run)
-storage/
-*.db
-*.sqlite
-tmp/
-chunked_uploads/
+# --- Go source code and module files ---
+!go.mod
+!go.sum
+!**/*.go
 
-# Environment (commit .env.example only)
-.env
-.env.*
+# --- Main application entrypoint ---
+!cmd/
+!cmd/**
+
+# --- Internal packages ---
+!internal/
+!internal/**
+
+# --- Docker & deployment ---
+!Dockerfile
+!docker-compose.yml
+!docker-compose.*.yml
+
+# --- GitHub Actions / CI configuration ---
+!.github/
+!.github/**
+
+# --- Documentation and legal ---
+!README.md
+!LICENSE
 !.env.example
 
-# IDE / editors
-.idea/
-.vscode/
-*.swp
-*.swo
-*~
-.project
-.classpath
+# --- Web UI assets and templates (committed source) ---
+!static/
+!static/**
+!templates/
+!templates/**
+!assets/
+!assets/**
 
-# OS generated
-.DS_Store
-.DS_Store?
-._*
-.Spotlight-V100
-.Trashes
-ehthumbs.db
-Thumbs.db
+# --- Database migrations (if any) ---
+!migrations/
+!migrations/**
 
-# Logs
-*.log
-log/
+# --- The .gitignore file itself (good practice) ---
+!.gitignore
 
-# Build / dist
-dist/
-build/
-
-# Misc
-*.bak
+# =============================================================================
+# Notes:
+# - Runtime data (storage/, *.db, tmp/, etc.) is automatically ignored
+#   because we never explicitly allow it.
+# - Binaries, build artifacts, IDE files, OS files, logs, etc. are ignored
+#   by the initial `*` rule.
+# - If you need to add something new to the repo, you must explicitly add
+#   a `!path` rule above.
+# =============================================================================

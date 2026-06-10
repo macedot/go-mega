@@ -2,24 +2,25 @@ version: "3.8"
 
 services:
   web:
-    # Production: use the pre-built image from GitHub Container Registry.
-    # See https://github.com/macedot/go-mega/pkgs/container/go-mega
-    image: ghcr.io/macedot/go-mega:latest
+    # Development: build the image locally from source.
+    # Use this for testing changes without pushing to GHCR.
+    build: .
+    image: go-mega:dev
     restart: unless-stopped
     environment:
-      - APP_ENV=production
+      - APP_ENV=development
       - PORT=8080
-      - APP_SECRET=${APP_SECRET:-change-this-to-a-long-random-string-in-prod}
+      - APP_SECRET=${APP_SECRET:-dev-secret-change-in-production}
       - STORAGE_PATH=/app/storage
       - HOST=${HOST:-localhost:8080}
-      # Add for Cloudflare Tunnel:
+      # Add for Cloudflare Tunnel (optional even in dev):
       # - WEBAUTHN_ORIGIN=https://yourhost.example.com
       # - WEBAUTHN_RP_ID=yourhost.example.com
     volumes:
       - uploads:/app/storage
-    # For local direct access (no CF): expose 8080
-    # ports:
-    #   - "8080:8080"
+    # Expose port by default for local development
+    ports:
+      - "8080:8080"
     healthcheck:
       test: ["CMD", "wget", "-qO-", "http://localhost:8080/up"]
       interval: 30s
