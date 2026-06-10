@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  web:
+    build: .
+    image: go-mega:latest
+    restart: unless-stopped
+    environment:
+      - APP_ENV=production
+      - PORT=8080
+      - APP_SECRET=${APP_SECRET:-change-this-to-a-long-random-string-in-prod}
+      - STORAGE_PATH=/app/storage
+      - HOST=${HOST:-localhost:8080}
+      # Add for Cloudflare Tunnel:
+      # - WEBAUTHN_ORIGIN=https://yourhost.example.com
+      # - WEBAUTHN_RP_ID=yourhost.example.com
+    volumes:
+      - uploads:/app/storage
+    # For local direct access (no CF): expose 8080
+    # ports:
+    #   - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/up"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+volumes:
+  uploads:

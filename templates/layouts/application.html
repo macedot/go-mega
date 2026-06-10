@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html class="h-full" lang="en" data-controller="theme">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ .Title }}</title>
+  <link rel="icon" href="/icons/icon.png" type="image/png">
+  <link rel="stylesheet" href="/static/css/app.css">
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    // Tailwind script play for runtime + dark
+    function initTheme() {
+      const root = document.documentElement;
+      const saved = localStorage.getItem('theme');
+      if (saved === 'dark' || (!saved && window.matchMedia('(prefers-color-scheme: dark)').matches)) {
+        root.classList.add('dark');
+      }
+    }
+    function toggleTheme() {
+      const root = document.documentElement;
+      if (root.classList.contains('dark')) {
+        root.classList.remove('dark');
+        localStorage.setItem('theme', 'light');
+      } else {
+        root.classList.add('dark');
+        localStorage.setItem('theme', 'dark');
+      }
+    }
+    window.onload = initTheme;
+  </script>
+  <style>
+    :root {
+      --color-primary: hsl(0 85% 50%);
+      --color-primary-hover: hsl(0 85% 40%);
+    }
+    .dark { color-scheme: dark; }
+  </style>
+</head>
+<body class="h-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
+  {{ if .Authenticated }}
+  <nav class="fixed top-0 left-0 right-0 z-50 border-b border-zinc-200 dark:border-zinc-800 bg-white/80 dark:bg-zinc-950/80 backdrop-blur">
+    <div class="max-w-4xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <a href="/uploads/new" class="font-semibold tracking-tight">go-mega</a>
+      </div>
+      <div class="flex items-center gap-3 text-sm">
+        <a href="/uploads/new" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900">Uploads</a>
+        <a href="/profile" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900">Profile</a>
+        <button onclick="toggleTheme()" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900">🌓</button>
+        <form method="post" action="/logout" class="inline">
+          <button class="text-red-600 hover:text-red-500 px-3 py-1.5">Logout</button>
+        </form>
+      </div>
+    </div>
+  </nav>
+  {{ end }}
+
+  <main class="{{ if .Authenticated }}pt-16{{ end }}">
+    {{ template "content" . }}
+  </main>
+
+  <script>
+    // minimal theme toggle support if data attr
+  </script>
+</body>
+</html>

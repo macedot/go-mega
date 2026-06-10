@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html class="h-full" lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ .Title }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" href="/icons/icon.png">
+  <style>
+    .dropzone { transition: all .1s ease }
+    .dropzone.dragover { border-color: #f43f5; background: rgba(244,63,94,.04) }
+  </style>
+</head>
+<body class="h-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
+  <nav class="fixed top-0 inset-x-0 z-50 bg-white/90 dark:bg-zinc-950/90 border-b border-zinc-200 dark:border-zinc-800 backdrop-blur">
+    <div class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
+      <div class="flex items-center gap-4">
+        <span class="font-semibold">go-mega</span>
+        <span class="text-xs px-2 py-0.5 rounded bg-zinc-100 dark:bg-zinc-800">self-hosted</span>
+      </div>
+      <div class="flex items-center gap-2 text-sm">
+        <a href="/profile" class="px-3 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-900">Profile</a>
+        <button onclick="document.documentElement.classList.toggle('dark');localStorage.theme=document.documentElement.classList.contains('dark')?'dark':'light'" class="px-2">🌓</button>
+        <form action="/logout" method="post" class="inline"><button class="text-red-600 px-3 py-1">Logout</button></form>
+      </div>
+    </div>
+  </nav>
+
+  <div class="max-w-3xl mx-auto pt-20 px-4 pb-12">
+    <div class="bg-white dark:bg-zinc-900 rounded-2xl shadow-xl p-8 border border-zinc-200 dark:border-zinc-800">
+      <h1 class="text-2xl font-semibold mb-6">Upload &amp; Share</h1>
+
+      <!-- Quota -->
+      <div class="mb-6 p-4 bg-zinc-50 dark:bg-zinc-800 rounded-xl">
+        <div class="flex justify-between text-sm mb-1.5">
+          <span class="font-medium">Storage</span>
+          <span class="text-zinc-500">{{ humanSize .StorageUsed }} / {{ humanSize .DiskQuota }}</span>
+        </div>
+        <div class="h-2 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
+          <div class="h-2 {{ if gt .QuotaPct 90 }}bg-red-500{{ else if gt .QuotaPct 70 }}bg-amber-500{{ else }}bg-emerald-500{{ end }}" style="width: {{ .QuotaPct }}%"></div>
+        </div>
+      </div>
+
+      {{ if .Error }}
+      <div class="mb-4 p-3 rounded-lg bg-red-50 dark:bg-red-950 border border-red-200 text-sm text-red-700">{{ .Error }}</div>
+      {{ end }}
+
+      <form method="post" action="/uploads" enctype="multipart/form-data" id="upload-form" class="space-y-6">
+        <!-- Drop zone -->
+        <div id="dropzone"
+             class="dropzone border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-2xl p-10 text-center cursor-pointer hover:border-red-400"
+             onclick="document.getElementById('file-input').click()">
+          <div class="mx-auto w-12 h-12 text-zinc-400">⬆️</div>
+          <p class="mt-3 text-sm">Drag &amp; drop a file here, or click to choose</p>
+          <p class="text-[11px] text-zinc-500 mt-1">Max {{ humanSize .MaxUpload }}</p>
+          <input type="file" id="file-input" name="file" class="hidden" required>
+          <div id="preview" class="hidden mt-4 text-left bg-zinc-100 dark:bg-zinc-800 p-3 rounded text-sm"></div>
+        </div>
+
+        <div class="grid grid-cols-2 gap-4">
+          <div>
+            <label class="block text-sm font-medium mb-1">Max downloads (1–100)</label>
+            <input type="number" name="max_downloads" value="5" min="1" max="100" class="w-full px-4 py-3 rounded-xl border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-950">
+          </div>
+          <div>
+            <label class="block text-sm font-medium mb-1">Expires in hours (1–24)</label>
+            <input type="number" name="ttl_hours" value="24" min="1" max="24" class="w-full px-4 py-3 rounded-xl border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-950">
+          </div>
+        </div>
+
+        <button type="submit" class="w-full py-3.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-semibold active:scale-[0.985] transition">Upload &amp; generate link</button>
+      </form>
+    </div>
+
+    <!-- Active files -->
+    {{ if .ActiveFiles }}
+    <div class="mt-8">
+      <h2 class="font-semibold mb-3 px-1">Active shares</h2>
+      <div class="space-y-3">
+        {{ range .ActiveFiles }}
+        <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
+          <div class="min-w-0">
+            <a href="/uploads/{{ .ID }}" class="font-medium hover:underline">{{ .OriginalFilename }}</a>
+            <div class="text-xs text-zinc-500">{{ humanSize .FileSize }} · {{ .DownloadsRemaining }} left · expires {{ .ExpiresAt.Format "Jan 2 15:04" }}</div>
+          </div>
+          <div class="flex items-center gap-2">
+            <a href="/d/{{ .DownloadHash }}" target="_blank" class="text-xs px-3 py-1 rounded-full border">Open link</a>
+            <form method="post" action="/uploads/{{ .ID }}/delete" onsubmit="return confirm('Delete this share?')">
+              <button class="text-xs px-3 py-1 text-red-600">Delete</button>
+            </form>
+          </div>
+        </div>
+        {{ end }}
+      </div>
+    </div>
+    {{ end }}
+
+    {{ if .InactiveFiles }}
+    <details class="mt-6 px-1">
+      <summary class="cursor-pointer text-sm text-zinc-500">Inactive / expired ({{ len .InactiveFiles }})</summary>
+      <div class="mt-2 space-y-2">
+        {{ range .InactiveFiles }}
+        <div class="text-sm flex justify-between bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded p-2">
+          <span class="truncate">{{ .OriginalFilename }}</span>
+          <form method="post" action="/uploads/{{ .ID }}/delete"><button class="text-red-500 text-xs">×</button></form>
+        </div>
+        {{ end }}
+      </div>
+    </details>
+    {{ end }}
+  </div>
+
+  <script>
+    const dz = document.getElementById('dropzone');
+    const input = document.getElementById('file-input');
+    const preview = document.getElementById('preview');
+
+    function showPreview(file) {
+      preview.classList.remove('hidden');
+      preview.innerHTML = `<strong>${file.name}</strong><br><span class="text-xs text-zinc-500">${(file.size/1024/1024).toFixed(2)} MB</span>`;
+    }
+    input.onchange = () => { if (input.files[0]) showPreview(input.files[0]); };
+    dz.ondragover = e => { e.preventDefault(); dz.classList.add('dragover'); };
+    dz.ondragleave = () => dz.classList.remove('dragover');
+    dz.ondrop = e => {
+      e.preventDefault(); dz.classList.remove('dragover');
+      if (e.dataTransfer.files.length) {
+        input.files = e.dataTransfer.files;
+        showPreview(e.dataTransfer.files[0]);
+      }
+    };
+  </script>
+</body>
+</html>

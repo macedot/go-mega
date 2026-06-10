@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html class="h-full" lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ .Title }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" href="/icons/icon.png">
+  <style>body{background:#fafafa} .dark body{background:#111} .card {background:white} .dark .card {background:#18181b}</style>
+</head>
+<body class="h-full flex items-center justify-center bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
+  <div class="w-full max-w-md px-6">
+    <div class="card rounded-2xl shadow-xl p-8 border border-zinc-200 dark:border-zinc-800">
+      <h1 class="text-2xl font-semibold tracking-tight mb-2">Sign in to go-mega</h1>
+      <p class="text-sm text-zinc-500 dark:text-zinc-400 mb-6">Self-hosted file sharing</p>
+
+      {{ if .Error }}
+      <div class="mb-4 p-3 bg-red-50 dark:bg-red-950 border border-red-200 dark:border-red-900 text-red-700 dark:text-red-300 text-sm rounded-lg">{{ .Error }}</div>
+      {{ end }}
+
+      <form method="post" action="/session" class="space-y-4">
+        <div>
+          <label class="block text-sm mb-1 text-zinc-600 dark:text-zinc-400">Email</label>
+          <input type="email" name="email_address" required class="w-full px-4 py-3 rounded-xl border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-red-500">
+        </div>
+        <div>
+          <label class="block text-sm mb-1 text-zinc-600 dark:text-zinc-400">Password</label>
+          <input type="password" name="password" required minlength="12" class="w-full px-4 py-3 rounded-xl border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900 focus:outline-none focus:ring-2 focus:ring-red-500">
+        </div>
+        <button type="submit" class="w-full py-3 bg-red-600 hover:bg-red-500 active:bg-red-700 transition text-white font-semibold rounded-xl">Sign in</button>
+      </form>
+
+      <p class="text-center text-xs text-zinc-500 mt-6">First user? Visit while no accounts exist to create the admin.</p>
+    </div>
+  </div>
+</body>
+</html>

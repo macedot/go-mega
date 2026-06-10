@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>{{ .Title }}</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="icon" href="/icons/icon.png">
+</head>
+<body class="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center p-6">
+  <div class="max-w-md w-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-8">
+    <div class="text-center">
+      <div class="mx-auto mb-4 text-5xl">📄</div>
+      <h1 class="font-semibold text-xl break-all">{{ .File.OriginalFilename }}</h1>
+      <p class="text-sm text-zinc-500 mt-1">{{ .File.ContentType }} · {{ .File.FileSize }} bytes</p>
+    </div>
+
+    <div class="my-6 text-sm grid grid-cols-2 gap-3">
+      <div class="bg-zinc-100 dark:bg-zinc-800 rounded p-3">
+        <div class="text-zinc-500 text-xs">Expires</div>
+        <div class="font-medium">{{ .File.ExpiresAt.Format "2006-01-02 15:04 MST" }}</div>
+      </div>
+      <div class="bg-zinc-100 dark:bg-zinc-800 rounded p-3">
+        <div class="text-zinc-500 text-xs">Downloads left</div>
+        <div class="font-medium">{{ .File.DownloadsRemaining }} / {{ .File.MaxDownloads }}</div>
+      </div>
+    </div>
+
+    <form method="post" action="/d/{{ .File.DownloadHash }}/file">
+      <button class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition text-white font-semibold rounded-2xl">Download file</button>
+    </form>
+
+    <p class="text-center text-xs text-zinc-400 mt-4">This link will stop working once the download limit or time is reached.</p>
+
+    {{ if .File.IsPreviewable }}
+    <div class="mt-4">
+      <a href="/d/{{ .File.DownloadHash }}/preview" target="_blank" class="block text-center text-sm underline">Preview in browser</a>
+    </div>
+    {{ end }}
+  </div>
+</body>
+</html>
