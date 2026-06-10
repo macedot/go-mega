@@ -17,6 +17,11 @@ import (
 func HandleRoot(w http.ResponseWriter, r *http.Request) {
 	user := auth.CurrentUser(r)
 	if user == nil {
+		cnt, _ := models.CountUsers(db.DB)
+		if cnt == 0 {
+			http.Redirect(w, r, "/setup", http.StatusSeeOther)
+			return
+		}
 		http.Redirect(w, r, "/session/new", http.StatusSeeOther)
 		return
 	}
@@ -28,6 +33,11 @@ func HandleLoginPage(t *template.Template) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if auth.Authenticated(r) {
 			http.Redirect(w, r, "/uploads/new", http.StatusSeeOther)
+			return
+		}
+		cnt, _ := models.CountUsers(db.DB)
+		if cnt == 0 {
+			http.Redirect(w, r, "/setup", http.StatusSeeOther)
 			return
 		}
 		render(w, t, "auth/login.html", map[string]interface{}{
