@@ -20,8 +20,10 @@ COPY --from=builder /out/server /app/server
 # static assets, templates, icons
 COPY static /app/static
 COPY templates /app/templates
-# empty dirs for volume (create as root before switching user)
-RUN mkdir -p /app/storage/uploads /app/tmp
+
+# Note: storage/ and tmp/ dirs are created by the app at runtime (os.MkdirAll)
+# or provided via mounted volumes. No RUN here because the distroless base
+# has no shell (/bin/sh).
 
 ENV APP_ENV=production \
     PORT=8080 \
