@@ -26,6 +26,7 @@
     </div>
 
     <form method="post" action="/d/{{ .File.DownloadHash }}/file">
+      <input type="hidden" name="_csrf" value="{{ .CSRF }}">
       <button class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition text-white font-semibold rounded-2xl">Download file</button>
     </form>
 

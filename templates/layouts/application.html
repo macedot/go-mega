@@ -48,6 +48,7 @@
         <a href="/profile" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900">Profile</a>
         <button onclick="toggleTheme()" class="px-3 py-1.5 rounded-lg hover:bg-zinc-100 dark:hover:bg-zinc-900">🌓</button>
         <form method="post" action="/logout" class="inline">
+          <input type="hidden" name="_csrf" value="{{ .CSRF }}">
           <button class="text-red-600 dark:text-red-400 hover:text-red-500 dark:hover:text-red-300 px-3 py-1.5">Logout</button>
         </form>
       </div>

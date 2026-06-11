@@ -46,6 +46,7 @@ func HandleUploadNew(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 			"MaxUpload":     config.Cfg.Security.MaxUploadSizeBytes,
 			"Authenticated": true,
 			"IsAdmin":       user.IsAdmin(),
+			"CSRF":          auth.EnsureCSRF(w, r),
 		}
 		render(w, t, "uploads/new.html", data)
 	}
@@ -56,6 +57,10 @@ func HandleUploadCreate(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 		user := auth.CurrentUser(r)
 		if user == nil {
 			http.Redirect(w, r, "/session/new", http.StatusSeeOther)
+			return
+		}
+		if !auth.VerifyCSRF(r) {
+			http.Error(w, "invalid csrf token", http.StatusForbidden)
 			return
 		}
 
@@ -137,6 +142,7 @@ func HandleUploadCreate(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 				"Error":         err.Error(),
 				"Authenticated": true,
 				"IsAdmin":       user.IsAdmin(),
+				"CSRF":          auth.EnsureCSRF(w, r),
 			}
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			render(w, t, "uploads/new.html", data)
@@ -180,6 +186,7 @@ func HandleUploadShow(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 			"DownloadURL":   url,
 			"QR":            qrB64,
 			"Authenticated": true,
+			"CSRF":          auth.EnsureCSRF(w, r),
 		}
 		render(w, t, "uploads/show.html", data)
 	}
@@ -188,6 +195,10 @@ func HandleUploadShow(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 func HandleUploadDelete(sqlDB *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		user := auth.CurrentUser(r)
+		if !auth.VerifyCSRF(r) {
+			http.Error(w, "invalid csrf token", http.StatusForbidden)
+			return
+		}
 		idStr := chi.URLParam(r, "id")
 		id, _ := strconv.ParseInt(idStr, 10, 64)
 

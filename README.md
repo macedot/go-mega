@@ -97,6 +97,25 @@ See `internal/config/config.go`. Key security knobs:
 - `USER_DISK_QUOTA_BYTES`
 - `UPLOAD_CHUNK_SIZE_BYTES` (placeholder for future chunked impl)
 
+## Security Considerations (important)
+
+This is a security-hardened MVP but **not** production-hardened without additional layers:
+
+- **CSRF**: Basic double-submit cookie protection added for state-changing forms (upload, delete, logout, setup, login, download consume). Tokens are ensured on form-rendering pages and verified on POSTs. Still use a reverse proxy with additional protections in production.
+- **Rate limiting & abuse**: The RateLimit middleware is now wired (global + multiplier from env). It is deliberately simple (in-memory). The Ban model and invalid-hash recording exist but are MVP stubs — wire them for real auto-banning (see original FrankMega Rack::Attack intent). Protect login, upload, setup, and invalid /d/ hashes aggressively.
+- **All request parameters are re-validated server-side against the authenticated user's privileges/role** (see recent changes to uploads handler and model guards). Never trust HTML min/max or client JS.
+- **Sessions**: Signed (gorilla/securecookie), DB-backed, HttpOnly, SameSite=Lax, Secure in prod. Long max-age (1 year "permanent" like original). RealIP aware for Cloudflare. No session fixation rotation on login yet.
+- **File uploads**: Filename sanitization (basename + control chars + windows reserved + truncate), server-side size/quota/MIME checks, storage keys are random hashes (not user-controlled). Content-Disposition uses sanitized names. Preview only for safe types. Still: no AV scanning; treat user files as untrusted.
+- **Error handling**: Many best-effort ignores remain (typical for MVP). Security-sensitive paths log or return generic errors. Review for info disclosure.
+- **Docker**: Distroless + CGO=0 + nonroot (good). Named volumes currently require root inside container for SQLite init (see compose comments). Prefer bind mounts with `chown 65532:65532` on the host dir for true non-root. Added .dockerignore to keep build context minimal and secret-free.
+- **Headers**: Basic security headers (CSP with CDN allowances for Tailwind, HSTS, X-Content-Type-Options, etc.) via middleware. Tighten CSP if you self-host CSS/JS.
+- **Secrets**: AppSecret, DB, etc. via env only. No defaults in prod images. Rotate regularly.
+- **Other**: Public links are capability URLs (high-entropy hash). No account lockout beyond rate limiting. 2FA/WebAuthn fields exist but are not yet enforced. Use behind a proper reverse proxy (Cloudflare Tunnel recommended) that terminates TLS and adds WAF/rate limiting.
+
+Run `go list -m -u all` and govulncheck periodically. See original FrankMega for more hardened patterns (Rack::Attack, secure_headers gem, etc.).
+
+Report issues responsibly. This is intended for personal/home server use, not high-security or public-facing deployments.
+
 ## Differences from Rails version & design choices
 
 - Pure Go SQLite (`modernc.org/sqlite`) — no cgo, easy cross-build & Docker.

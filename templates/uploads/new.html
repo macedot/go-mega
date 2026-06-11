@@ -47,6 +47,7 @@
       </div>
 
       <form method="post" action="/uploads" enctype="multipart/form-data" id="upload-form" class="space-y-6" data-max-upload="{{ .MaxUpload }}">
+        <input type="hidden" name="_csrf" value="{{ .CSRF }}">
         <!-- Drop zone -->
         <div id="dropzone"
              class="dropzone border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-2xl p-10 text-center cursor-pointer hover:border-red-400"
@@ -104,6 +105,7 @@
           <div class="flex items-center gap-2">
             <a href="/d/{{ .DownloadHash }}" target="_blank" class="text-xs px-3 py-1 rounded-full border dark:border-zinc-700">Open link</a>
             <form method="post" action="/uploads/{{ .ID }}/delete" onsubmit="return confirm('Delete this share?')">
+              <input type="hidden" name="_csrf" value="{{ .CSRF }}">
               <button class="text-xs px-3 py-1 text-red-600 dark:text-red-400">Delete</button>
             </form>
           </div>
@@ -120,7 +122,7 @@
         {{ range .InactiveFiles }}
         <div class="text-sm flex justify-between bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded p-2">
           <span class="truncate">{{ .OriginalFilename }}</span>
-          <form method="post" action="/uploads/{{ .ID }}/delete"><button class="text-red-500 dark:text-red-400 text-xs">×</button></form>
+          <form method="post" action="/uploads/{{ .ID }}/delete"><input type="hidden" name="_csrf" value="{{ .CSRF }}"><button class="text-red-500 dark:text-red-400 text-xs">×</button></form>
         </div>
         {{ end }}
       </div>
@@ -141,7 +143,18 @@
 
     function showPreview(file) {
       preview.classList.remove('hidden');
-      preview.innerHTML = `<strong>${file.name}</strong><br><span class="text-xs text-zinc-500 dark:text-zinc-400">${(file.size/1024/1024).toFixed(2)} MB</span>`;
+      // Safe: use textContent instead of innerHTML to avoid any XSS risk from file metadata.
+      preview.innerHTML = ''; // clear
+      const strong = document.createElement('strong');
+      strong.textContent = file.name;
+      const br = document.createElement('br');
+      const span = document.createElement('span');
+      span.className = 'text-xs text-zinc-500 dark:text-zinc-400';
+      span.textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+      preview.appendChild(strong);
+      preview.appendChild(br);
+      preview.appendChild(span);
+
       // reset any previous upload state when a new file is chosen
       if (progress) progress.classList.add('hidden');
       if (bar) bar.style.width = '0%';

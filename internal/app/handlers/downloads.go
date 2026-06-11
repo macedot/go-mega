@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"net/http"
 	"os"
+	"strings"
 
 	"github.com/macedot/go-mega/internal/app/auth"
 	"github.com/macedot/go-mega/internal/app/models"
@@ -37,6 +38,7 @@ func HandleDownloadShow(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 			"Title":         "Download " + sf.OriginalFilename,
 			"File":          sf,
 			"Authenticated": auth.Authenticated(r),
+			"CSRF":          auth.EnsureCSRF(w, r),
 		}
 		render(w, t, "downloads/show.html", data)
 	}
@@ -44,6 +46,10 @@ func HandleDownloadShow(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 
 func HandleDownloadConsume(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !auth.VerifyCSRF(r) {
+			http.Error(w, "invalid csrf token", http.StatusForbidden)
+			return
+		}
 		hash := chi.URLParam(r, "hash")
 		sf, err := models.FindSharedFileByHash(sqlDB, hash)
 		if err != nil || sf == nil {
@@ -72,7 +78,9 @@ func HandleDownloadConsume(t *template.Template, sqlDB *sql.DB) http.HandlerFunc
 		defer f.Close()
 
 		w.Header().Set("Content-Type", sf.ContentType)
-		w.Header().Set("Content-Disposition", "attachment; filename=\""+sf.OriginalFilename+"\"")
+		// Safe filename in disposition (sanitizer already removes ", but double-escape for defense).
+		safeName := strings.ReplaceAll(sf.OriginalFilename, `"`, "")
+		w.Header().Set("Content-Disposition", `attachment; filename="`+safeName+`"`)
 		http.ServeContent(w, r, sf.OriginalFilename, sf.UpdatedAt, f)
 	}
 }
@@ -98,10 +106,13 @@ func HandleDownloadPreview(sqlDB *sql.DB) http.HandlerFunc {
 }
 
 func recordInvalidAccess(r *http.Request, sqlDB *sql.DB) {
-	// MVP: just log or create a ban counter later
-	// For now simple: increment a in-mem or ignore
+	// Security: record abuse (invalid hash access). Currently a stub.
+	// In production this should feed the Ban model / rate limiter (e.g. after N attempts auto-ban IP).
+	// See middleware/ratelimit.go and schema for bans table.
 	ip := auth.RealIP(r)
-	// Could insert a temp "invalid_access" or directly ban after N using jobs style
+	// TODO: implement counting + ban creation using sqlDB (e.g. INSERT or increment in a abuse table).
+	// For now at least log at warn level (in real app use structured logger).
 	_ = ip
 	_ = db.DB
+	// Example: log.Printf("security: invalid hash access from ip=%s", ip)
 }

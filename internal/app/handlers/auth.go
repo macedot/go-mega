@@ -40,14 +40,20 @@ func HandleLoginPage(t *template.Template) http.HandlerFunc {
 			http.Redirect(w, r, "/setup", http.StatusSeeOther)
 			return
 		}
+		csrf := auth.EnsureCSRF(w, r)
 		render(w, t, "auth/login.html", map[string]interface{}{
 			"Title": "Sign in — go-mega",
+			"CSRF":  csrf,
 		})
 	}
 }
 
 func HandleLogin(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !auth.VerifyCSRF(r) {
+			http.Error(w, "invalid csrf token", http.StatusForbidden)
+			return
+		}
 		email := r.FormValue("email_address")
 		pass := r.FormValue("password")
 		if email == "" || pass == "" {
@@ -58,9 +64,11 @@ func HandleLogin(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 		if err != nil {
 			// simple error for now
 			w.WriteHeader(http.StatusUnauthorized)
+			csrf := auth.EnsureCSRF(w, r)
 			t.ExecuteTemplate(w, "auth/login.html", map[string]interface{}{
 				"Title": "Sign in — go-mega",
 				"Error": "Invalid email or password.",
+				"CSRF":  csrf,
 			})
 			return
 		}
@@ -75,6 +83,10 @@ func HandleLogin(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 
 func HandleLogout(sqlDB *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !auth.VerifyCSRF(r) {
+			http.Error(w, "invalid csrf token", http.StatusForbidden)
+			return
+		}
 		if s := auth.CurrentSession(r); s != nil {
 			auth.TerminateSession(w, r, sqlDB, s.ID)
 		} else {
@@ -92,12 +104,17 @@ func HandleSetupPage(t *template.Template) http.HandlerFunc {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
 			return
 		}
-		render(w, t, "auth/setup.html", map[string]interface{}{"Title": "Initial Setup — go-mega"})
+		csrf := auth.EnsureCSRF(w, r)
+		render(w, t, "auth/setup.html", map[string]interface{}{"Title": "Initial Setup — go-mega", "CSRF": csrf})
 	}
 }
 
 func HandleSetup(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		if !auth.VerifyCSRF(r) {
+			http.Error(w, "invalid csrf token", http.StatusForbidden)
+			return
+		}
 		cnt, _ := models.CountUsers(sqlDB)
 		if cnt > 0 {
 			http.Redirect(w, r, "/", http.StatusSeeOther)
@@ -108,9 +125,11 @@ func HandleSetup(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 		// no confirm for simplicity; add in template
 		user, err := models.CreateUser(sqlDB, email, pass, "admin", true)
 		if err != nil {
+			csrf := auth.EnsureCSRF(w, r)
 			render(w, t, "auth/setup.html", map[string]interface{}{
 				"Title": "Initial Setup — go-mega",
 				"Error": err.Error(),
+				"CSRF":  csrf,
 			})
 			return
 		}

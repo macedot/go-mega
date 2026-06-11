@@ -184,6 +184,50 @@ func Authenticated(r *http.Request) bool {
 	return CurrentUser(r) != nil
 }
 
+// CSRF helpers (simple double-submit cookie pattern using the existing securecookie).
+// Token is set on responses that render forms; verified on mutating POSTs for authenticated users.
+// This is manual (no new deps) and sufficient for MVP. For stronger, consider gorilla/csrf.
+
+const csrfCookieName = "csrf_token"
+
+// EnsureCSRF sets (if missing) and returns a CSRF token for use in forms.
+func EnsureCSRF(w http.ResponseWriter, r *http.Request) string {
+	if c, err := r.Cookie(csrfCookieName); err == nil && c.Value != "" {
+		return c.Value
+	}
+	// Sign a simple value. In real use could include session ID or timestamp.
+	token, _ := sc.Encode(csrfCookieName, "valid")
+	http.SetCookie(w, &http.Cookie{
+		Name:     csrfCookieName,
+		Value:    token,
+		Path:     "/",
+		HttpOnly: false, // must be readable to put in form hidden field
+		SameSite: http.SameSiteLaxMode,
+		Secure:   config.Cfg.IsProd(),
+		MaxAge:   60 * 60 * 24 * 365,
+	})
+	return token
+}
+
+// VerifyCSRF checks the double-submit token for state-changing requests.
+// Call this early in POST handlers that modify state (after auth).
+// Returns false (and caller should 403) on mismatch or missing.
+func VerifyCSRF(r *http.Request) bool {
+	cookie, err := r.Cookie(csrfCookieName)
+	if err != nil || cookie.Value == "" {
+		return false
+	}
+	formToken := r.FormValue("_csrf")
+	if formToken == "" {
+		formToken = r.Header.Get("X-CSRF-Token")
+	}
+	if formToken == "" || formToken != cookie.Value {
+		return false
+	}
+	// Optionally re-validate the signed value with sc.Decode, but double-submit + SameSite is the main protection.
+	return true
+}
+
 // RealIP extracts client IP, preferring CF headers then X-Forwarded etc.
 func RealIP(r *http.Request) string {
 	if ip := r.Header.Get("CF-Connecting-IP"); ip != "" {

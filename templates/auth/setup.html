@@ -17,6 +17,7 @@
       {{ end }}
 
       <form method="post" action="/setup" class="space-y-4">
+        <input type="hidden" name="_csrf" value="{{ .CSRF }}">
         <div>
           <label class="block text-sm mb-1 text-zinc-600 dark:text-zinc-400">Email address</label>
           <input type="email" name="email_address" required class="w-full px-4 py-3 rounded-xl border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-900">

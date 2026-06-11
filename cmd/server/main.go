@@ -21,6 +21,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+
+	appmiddleware "github.com/macedot/go-mega/internal/app/middleware"
 )
 
 func main() {
@@ -55,6 +57,14 @@ func main() {
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
+
+	// Security: wire the existing rate limiter (was defined but unused).
+	// It is a basic in-memory implementation; for production consider
+	// integrating the full Ban model + per-endpoint limits (login, upload, setup, invalid hashes).
+	r.Use(appmiddleware.RateLimit)
+
+	// Security headers (CSP, HSTS, etc.). Applied early.
+	r.Use(appmiddleware.SecurityHeaders)
 
 	// Static (disk served)
 	r.Handle("/static/*", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))

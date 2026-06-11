@@ -33,6 +33,7 @@
           <div><strong>TTL:</strong> {{ if eq .File.TTLHours 0 }}never expires{{ else }}{{ .File.TTLHours }} hours{{ end }}</div>
           <div class="pt-2"><a href="/d/{{ .File.DownloadHash }}" target="_blank" class="underline">Open landing page</a></div>
           <form method="post" action="/uploads/{{ .File.ID }}/delete" class="pt-1">
+            <input type="hidden" name="_csrf" value="{{ .CSRF }}">
             <button class="text-red-600 dark:text-red-400 text-sm" onclick="return confirm('Delete share?')">Delete this share</button>
           </form>
         </div>
