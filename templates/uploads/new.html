@@ -143,6 +143,14 @@
     const uploadError = document.getElementById('upload-error');
     const submitBtn = document.getElementById('upload-submit');
 
+    function formatBytes(bytes) {
+      if (bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+
     function showPreview(file) {
       preview.classList.remove('hidden');
       // Safe: use textContent instead of innerHTML to avoid any XSS risk from file metadata.
@@ -152,7 +160,7 @@
       const br = document.createElement('br');
       const span = document.createElement('span');
       span.className = 'text-xs text-zinc-500 dark:text-zinc-400';
-      span.textContent = (file.size / 1024 / 1024).toFixed(2) + ' MB';
+      span.textContent = formatBytes(file.size);
       preview.appendChild(strong);
       preview.appendChild(br);
       preview.appendChild(span);
@@ -163,6 +171,9 @@
       if (text) text.textContent = 'Uploading...';
       if (uploadError) uploadError.classList.add('hidden');
       if (submitBtn) submitBtn.disabled = false;
+
+      // Restore the options grid + submit button (in case we hid them during a previous failed upload)
+      restoreUploadControls();
     }
 
     function resetUploadUI() {
@@ -170,6 +181,18 @@
       if (bar) bar.style.width = '0%';
       if (text) text.textContent = 'Uploading...';
       if (submitBtn) submitBtn.disabled = false;
+      restoreUploadControls();
+    }
+
+    function restoreUploadControls() {
+      // The max downloads / expires grid and the big submit button are hidden
+      // while an upload is in flight so the user focuses only on progress.
+      // We restore them on error or when the user picks a different file.
+      const optionsGrid = form ? form.querySelector('.grid') : null;
+      if (optionsGrid) optionsGrid.style.display = '';
+      const adminNote = form ? form.querySelector('p.text-\\[10px\\]') : null;
+      if (adminNote) adminNote.style.display = '';
+      if (submitBtn) submitBtn.style.display = '';
     }
 
     function setSingleFile(file) {
@@ -263,6 +286,17 @@
         if (bar) bar.style.width = '0%';
         if (text) text.textContent = 'Uploading 0%';
         if (submitBtn) submitBtn.disabled = true;
+
+        // Hide the download limit / expiry controls and the submit button during the
+        // (potentially long) upload so the progress bar + "Uploading X%" / "Processing..."
+        // is the only thing visible. This makes large/slow uploads feel less "stuck"
+        // and cluttered. Controls are restored by resetUploadUI / showPreview on error
+        // or new file selection. (On success we do a full page reload anyway.)
+        const optionsGrid = form.querySelector('.grid');
+        if (optionsGrid) optionsGrid.style.display = 'none';
+        const adminNote = form.querySelector('p.text-\\[10px\\]');
+        if (adminNote) adminNote.style.display = 'none';
+        if (submitBtn) submitBtn.style.display = 'none';
 
         const formData = new FormData(form);
         const xhr = new XMLHttpRequest();

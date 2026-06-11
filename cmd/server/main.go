@@ -56,7 +56,10 @@ func main() {
 	r.Use(middleware.RequestID)
 	r.Use(middleware.Logger)
 	r.Use(middleware.Recoverer)
-	r.Use(middleware.Timeout(60 * time.Second))
+	// Use a long timeout for the whole app because large file uploads (multi-GB
+	// backups etc.) can easily take many minutes. The old 60s value would kill
+	// slow or large uploads mid-flight, making progress appear to "get stuck".
+	r.Use(middleware.Timeout(30 * time.Minute))
 
 	// Security: wire the existing rate limiter (was defined but unused).
 	// It is a basic in-memory implementation; for production consider
@@ -116,8 +119,11 @@ func main() {
 	srv := &http.Server{
 		Addr:         ":" + cfg.Port,
 		Handler:      r,
-		ReadTimeout:  5 * time.Minute,
-		WriteTimeout: 5 * time.Minute,
+		// Long timeouts are required for large file uploads. A slow link uploading
+		// several GB can easily exceed the previous 5m limits and cause the upload
+		// to appear stuck or be aborted by the server.
+		ReadTimeout:  30 * time.Minute,
+		WriteTimeout: 30 * time.Minute,
 	}
 
 	go func() {
