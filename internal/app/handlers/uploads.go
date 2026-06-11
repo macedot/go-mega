@@ -66,6 +66,39 @@ func HandleUploadCreate(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 
 		// multipart
 		r.ParseMultipartForm(32 << 20) // 32MB buffer
+
+		// Security: enforce single file only (client can be bypassed; folders and
+		// multi-file posts via curl or modified forms must be rejected here).
+		if r.MultipartForm == nil || len(r.MultipartForm.File["file"]) != 1 {
+			used, _ := user.StorageUsed(sqlDB)
+			active, _ := models.FindSharedFilesByUser(sqlDB, user.ID, true)
+			inactive, _ := models.FindSharedFilesByUser(sqlDB, user.ID, false)
+			pct := 0
+			quota := user.DiskQuota()
+			if quota > 0 {
+				pct = int(float64(used) / float64(quota) * 100)
+				if pct > 100 {
+					pct = 100
+				}
+			}
+			data := map[string]interface{}{
+				"Title":         "Upload — go-mega",
+				"ActiveFiles":   active,
+				"InactiveFiles": inactive,
+				"StorageUsed":   used,
+				"DiskQuota":     quota,
+				"QuotaPct":      pct,
+				"MaxUpload":     config.Cfg.Security.MaxUploadSizeBytes,
+				"Error":         "Please select exactly one file to upload. Multiple files or directories are not supported.",
+				"Authenticated": true,
+				"IsAdmin":       user.IsAdmin(),
+				"CSRF":          auth.EnsureCSRF(w, r),
+			}
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			render(w, t, "uploads/new.html", data)
+			return
+		}
+
 		f, fh, err := r.FormFile("file")
 		if err != nil {
 			http.Error(w, "file required", http.StatusBadRequest)
@@ -101,15 +134,26 @@ func HandleUploadCreate(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 			used, _ := user.StorageUsed(sqlDB)
 			active, _ := models.FindSharedFilesByUser(sqlDB, user.ID, true)
 			inactive, _ := models.FindSharedFilesByUser(sqlDB, user.ID, false)
+			pct := 0
+			quota := user.DiskQuota()
+			if quota > 0 {
+				pct = int(float64(used) / float64(quota) * 100)
+				if pct > 100 {
+					pct = 100
+				}
+			}
 			data := map[string]interface{}{
 				"Title":         "Upload — go-mega",
 				"ActiveFiles":   active,
 				"InactiveFiles": inactive,
 				"StorageUsed":   used,
-				"DiskQuota":     user.DiskQuota(),
+				"DiskQuota":     quota,
+				"QuotaPct":      pct,
+				"MaxUpload":     config.Cfg.Security.MaxUploadSizeBytes,
 				"Error":         limitError,
 				"Authenticated": true,
 				"IsAdmin":       user.IsAdmin(),
+				"CSRF":          auth.EnsureCSRF(w, r),
 			}
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			render(w, t, "uploads/new.html", data)
@@ -133,12 +177,22 @@ func HandleUploadCreate(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 			active, _ := models.FindSharedFilesByUser(sqlDB, user.ID, true)
 			inactive, _ := models.FindSharedFilesByUser(sqlDB, user.ID, false)
 			used, _ := user.StorageUsed(sqlDB)
+			pct := 0
+			quota := user.DiskQuota()
+			if quota > 0 {
+				pct = int(float64(used) / float64(quota) * 100)
+				if pct > 100 {
+					pct = 100
+				}
+			}
 			data := map[string]interface{}{
 				"Title":         "Upload — go-mega",
 				"ActiveFiles":   active,
 				"InactiveFiles": inactive,
 				"StorageUsed":   used,
-				"DiskQuota":     user.DiskQuota(),
+				"DiskQuota":     quota,
+				"QuotaPct":      pct,
+				"MaxUpload":     config.Cfg.Security.MaxUploadSizeBytes,
 				"Error":         err.Error(),
 				"Authenticated": true,
 				"IsAdmin":       user.IsAdmin(),
