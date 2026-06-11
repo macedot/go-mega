@@ -70,26 +70,45 @@ func HandleUploadCreate(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 
 		maxDL := parseInt(r.FormValue("max_downloads"), 5)
 		ttl := parseInt(r.FormValue("ttl_hours"), 24)
-		if !user.IsAdmin() {
-			if maxDL < 1 {
-				maxDL = 1
-			}
-			if maxDL > 100 {
-				maxDL = 100
-			}
-			if ttl < 1 {
-				ttl = 1
-			}
-			if ttl > 24 {
-				ttl = 24
-			}
-		} else {
+
+		// Security: always re-validate user-supplied parameters against the
+		// authenticated user's privileges. Never trust client-side form limits.
+		// This prevents non-admins from bypassing UI constraints (e.g. via curl
+		// or modified forms) to create unlimited/no-expiry links.
+		var limitError string
+		if user.IsAdmin() {
 			if maxDL < 0 {
 				maxDL = 0
 			}
 			if ttl < 0 {
 				ttl = 0
 			}
+		} else {
+			if maxDL < 1 || maxDL > 100 {
+				limitError = "Only administrators can create links with unlimited downloads or with values outside the 1-100 range."
+			}
+			if ttl < 1 || ttl > 24 {
+				limitError = "Only administrators can create links with no expiration or with values outside the 1-24 range."
+			}
+		}
+
+		if limitError != "" {
+			used, _ := user.StorageUsed(sqlDB)
+			active, _ := models.FindSharedFilesByUser(sqlDB, user.ID, true)
+			inactive, _ := models.FindSharedFilesByUser(sqlDB, user.ID, false)
+			data := map[string]interface{}{
+				"Title":         "Upload — go-mega",
+				"ActiveFiles":   active,
+				"InactiveFiles": inactive,
+				"StorageUsed":   used,
+				"DiskQuota":     user.DiskQuota(),
+				"Error":         limitError,
+				"Authenticated": true,
+				"IsAdmin":       user.IsAdmin(),
+			}
+			w.WriteHeader(http.StatusUnprocessableEntity)
+			render(w, t, "uploads/new.html", data)
+			return
 		}
 
 		// detect type

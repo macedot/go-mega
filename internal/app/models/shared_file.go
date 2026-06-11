@@ -128,6 +128,14 @@ func CreateSharedFileFromUpload(db *sql.DB, userID int64, originalName string, c
 		return nil, errors.New("storage quota exceeded")
 	}
 
+	// Defense-in-depth: callers (e.g. the web handler) are responsible for
+	// validating maxDL/ttl against the authenticated user's privileges
+	// (non-admins may not request 0/unlimited or out-of-range values).
+	// We only sanity-check here.
+	if maxDL < 0 || ttl < 0 {
+		return nil, errors.New("invalid download limit or expiration time")
+	}
+
 	// mime allow check (if any enabled)
 	if allowed, _ := AllowedMimeTypesEnabled(db); len(allowed) > 0 {
 		ok := false
