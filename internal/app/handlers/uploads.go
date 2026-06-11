@@ -45,6 +45,7 @@ func HandleUploadNew(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 			"QuotaPct":      pct,
 			"MaxUpload":     config.Cfg.Security.MaxUploadSizeBytes,
 			"Authenticated": true,
+			"IsAdmin":       user.IsAdmin(),
 		}
 		render(w, t, "uploads/new.html", data)
 	}
@@ -68,18 +69,27 @@ func HandleUploadCreate(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 		defer f.Close()
 
 		maxDL := parseInt(r.FormValue("max_downloads"), 5)
-		if maxDL < 1 {
-			maxDL = 1
-		}
-		if maxDL > 100 {
-			maxDL = 100
-		}
 		ttl := parseInt(r.FormValue("ttl_hours"), 24)
-		if ttl < 1 {
-			ttl = 1
-		}
-		if ttl > 24 {
-			ttl = 24
+		if !user.IsAdmin() {
+			if maxDL < 1 {
+				maxDL = 1
+			}
+			if maxDL > 100 {
+				maxDL = 100
+			}
+			if ttl < 1 {
+				ttl = 1
+			}
+			if ttl > 24 {
+				ttl = 24
+			}
+		} else {
+			if maxDL < 0 {
+				maxDL = 0
+			}
+			if ttl < 0 {
+				ttl = 0
+			}
 		}
 
 		// detect type
@@ -107,6 +117,7 @@ func HandleUploadCreate(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 				"DiskQuota":     user.DiskQuota(),
 				"Error":         err.Error(),
 				"Authenticated": true,
+				"IsAdmin":       user.IsAdmin(),
 			}
 			w.WriteHeader(http.StatusUnprocessableEntity)
 			render(w, t, "uploads/new.html", data)

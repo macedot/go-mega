@@ -21,7 +21,7 @@
       <div class="flex items-center gap-2 text-sm">
         <a href="/profile" class="px-3 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-900">Profile</a>
         <button onclick="document.documentElement.classList.toggle('dark');localStorage.theme=document.documentElement.classList.contains('dark')?'dark':'light'" class="px-2">🌓</button>
-        <form action="/logout" method="post" class="inline"><button class="text-red-600 px-3 py-1">Logout</button></form>
+        <form action="/logout" method="post" class="inline"><button class="text-red-600 dark:text-red-400 px-3 py-1">Logout</button></form>
       </div>
     </div>
   </nav>
@@ -34,7 +34,7 @@
       <div class="mb-6 p-4 bg-zinc-50 dark:bg-zinc-800 rounded-xl">
         <div class="flex justify-between text-sm mb-1.5">
           <span class="font-medium">Storage</span>
-          <span class="text-zinc-500">{{ humanSize .StorageUsed }} / {{ humanSize .DiskQuota }}</span>
+          <span class="text-zinc-500 dark:text-zinc-400">{{ humanSize .StorageUsed }} / {{ humanSize .DiskQuota }}</span>
         </div>
         <div class="h-2 bg-zinc-200 dark:bg-zinc-700 rounded-full overflow-hidden">
           <div class="h-2 {{ if gt .QuotaPct 90 }}bg-red-500{{ else if gt .QuotaPct 70 }}bg-amber-500{{ else }}bg-emerald-500{{ end }}" style="width: {{ .QuotaPct }}%"></div>
@@ -51,9 +51,9 @@
         <div id="dropzone"
              class="dropzone border-2 border-dashed border-zinc-300 dark:border-zinc-700 rounded-2xl p-10 text-center cursor-pointer hover:border-red-400"
              onclick="document.getElementById('file-input').click()">
-          <div class="mx-auto w-12 h-12 text-zinc-400">⬆️</div>
+          <div class="mx-auto w-12 h-12 text-zinc-400 dark:text-zinc-500">⬆️</div>
           <p class="mt-3 text-sm">Drag &amp; drop a file here, or click to choose</p>
-          <p class="text-[11px] text-zinc-500 mt-1">Max {{ humanSize .MaxUpload }}</p>
+          <p class="text-[11px] text-zinc-500 dark:text-zinc-400 mt-1">Max {{ humanSize .MaxUpload }}</p>
           <input type="file" id="file-input" name="file" class="hidden" required>
           <div id="preview" class="hidden mt-4 text-left bg-zinc-100 dark:bg-zinc-800 p-3 rounded text-sm"></div>
 
@@ -71,14 +71,18 @@
 
         <div class="grid grid-cols-2 gap-4">
           <div>
-            <label class="block text-sm font-medium mb-1">Max downloads (1–100)</label>
-            <input type="number" name="max_downloads" value="5" min="1" max="100" class="w-full px-4 py-3 rounded-xl border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-950">
+            <label class="block text-sm font-medium mb-1">Max downloads (0 = unlimited for admins)</label>
+            <input type="number" name="max_downloads" value="5" min="{{ if .IsAdmin }}0{{ else }}1{{ end }}" max="{{ if .IsAdmin }}10000{{ else }}100{{ end }}" class="w-full px-4 py-3 rounded-xl border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-950">
           </div>
           <div>
-            <label class="block text-sm font-medium mb-1">Expires in hours (1–24)</label>
-            <input type="number" name="ttl_hours" value="24" min="1" max="24" class="w-full px-4 py-3 rounded-xl border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-950">
+            <label class="block text-sm font-medium mb-1">Expires in hours (0 = never for admins)</label>
+            <input type="number" name="ttl_hours" value="24" min="{{ if .IsAdmin }}0{{ else }}1{{ end }}" max="{{ if .IsAdmin }}8760{{ else }}24{{ end }}" class="w-full px-4 py-3 rounded-xl border border-zinc-300 dark:border-zinc-700 dark:bg-zinc-950">
           </div>
         </div>
+
+        {{ if .IsAdmin }}
+        <p class="text-[10px] text-zinc-400 -mt-4">Admins: 0 means unlimited downloads or no expiration.</p>
+        {{ end }}
 
         <button id="upload-submit" type="submit" class="w-full py-3.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-semibold active:scale-[0.985] transition disabled:opacity-60">Upload &amp; generate link</button>
       </form>
@@ -93,12 +97,14 @@
         <div class="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-800 rounded-2xl p-4 flex items-center justify-between">
           <div class="min-w-0">
             <a href="/uploads/{{ .ID }}" class="font-medium hover:underline">{{ .OriginalFilename }}</a>
-            <div class="text-xs text-zinc-500">{{ humanSize .FileSize }} · {{ .DownloadsRemaining }} left · expires {{ .ExpiresAt.Format "Jan 2 15:04" }}</div>
+            <div class="text-xs text-zinc-500 dark:text-zinc-400">{{ humanSize .FileSize }} ·
+              {{ if eq .MaxDownloads 0 }}unlimited downloads{{ else }}{{ .DownloadsRemaining }} left{{ end }} ·
+              {{ if eq .TTLHours 0 }}never expires{{ else }}expires {{ .ExpiresAt.Format "Jan 2 15:04" }}{{ end }}</div>
           </div>
           <div class="flex items-center gap-2">
-            <a href="/d/{{ .DownloadHash }}" target="_blank" class="text-xs px-3 py-1 rounded-full border">Open link</a>
+            <a href="/d/{{ .DownloadHash }}" target="_blank" class="text-xs px-3 py-1 rounded-full border dark:border-zinc-700">Open link</a>
             <form method="post" action="/uploads/{{ .ID }}/delete" onsubmit="return confirm('Delete this share?')">
-              <button class="text-xs px-3 py-1 text-red-600">Delete</button>
+              <button class="text-xs px-3 py-1 text-red-600 dark:text-red-400">Delete</button>
             </form>
           </div>
         </div>
@@ -109,12 +115,12 @@
 
     {{ if .InactiveFiles }}
     <details class="mt-6 px-1">
-      <summary class="cursor-pointer text-sm text-zinc-500">Inactive / expired ({{ len .InactiveFiles }})</summary>
+      <summary class="cursor-pointer text-sm text-zinc-500 dark:text-zinc-400">Inactive / expired ({{ len .InactiveFiles }})</summary>
       <div class="mt-2 space-y-2">
         {{ range .InactiveFiles }}
         <div class="text-sm flex justify-between bg-white dark:bg-zinc-900 border border-zinc-100 dark:border-zinc-800 rounded p-2">
           <span class="truncate">{{ .OriginalFilename }}</span>
-          <form method="post" action="/uploads/{{ .ID }}/delete"><button class="text-red-500 text-xs">×</button></form>
+          <form method="post" action="/uploads/{{ .ID }}/delete"><button class="text-red-500 dark:text-red-400 text-xs">×</button></form>
         </div>
         {{ end }}
       </div>
@@ -135,7 +141,7 @@
 
     function showPreview(file) {
       preview.classList.remove('hidden');
-      preview.innerHTML = `<strong>${file.name}</strong><br><span class="text-xs text-zinc-500">${(file.size/1024/1024).toFixed(2)} MB</span>`;
+      preview.innerHTML = `<strong>${file.name}</strong><br><span class="text-xs text-zinc-500 dark:text-zinc-400">${(file.size/1024/1024).toFixed(2)} MB</span>`;
       // reset any previous upload state when a new file is chosen
       if (progress) progress.classList.add('hidden');
       if (bar) bar.style.width = '0%';

@@ -15,7 +15,7 @@
       <p class="text-sm text-emerald-600 dark:text-emerald-400 mt-1">Your file is now shareable via the link below.</p>
 
       <div class="mt-6">
-        <label class="text-xs text-zinc-500">Download link</label>
+        <label class="text-xs text-zinc-500 dark:text-zinc-400">Download link</label>
         <div class="flex mt-1">
           <input id="link" readonly value="{{ .DownloadURL }}" class="flex-1 font-mono text-sm px-4 py-3 bg-zinc-100 dark:bg-zinc-800 border border-zinc-300 dark:border-zinc-700 rounded-l-2xl">
           <button onclick="navigator.clipboard.writeText(document.getElementById('link').value);this.textContent='Copied!'" class="px-5 bg-zinc-900 dark:bg-white dark:text-zinc-900 text-white rounded-r-2xl text-sm font-medium">Copy</button>
@@ -29,11 +29,11 @@
         <div class="text-sm pt-2 space-y-1">
           <div><strong>File:</strong> {{ .File.OriginalFilename }}</div>
           <div><strong>Size:</strong> {{ .File.FileSize }} bytes</div>
-          <div><strong>Max downloads:</strong> {{ .File.MaxDownloads }}</div>
-          <div><strong>TTL:</strong> {{ .File.TTLHours }} hours</div>
+          <div><strong>Max downloads:</strong> {{ if eq .File.MaxDownloads 0 }}unlimited{{ else }}{{ .File.MaxDownloads }}{{ end }}</div>
+          <div><strong>TTL:</strong> {{ if eq .File.TTLHours 0 }}never expires{{ else }}{{ .File.TTLHours }} hours{{ end }}</div>
           <div class="pt-2"><a href="/d/{{ .File.DownloadHash }}" target="_blank" class="underline">Open landing page</a></div>
           <form method="post" action="/uploads/{{ .File.ID }}/delete" class="pt-1">
-            <button class="text-red-600 text-sm" onclick="return confirm('Delete share?')">Delete this share</button>
+            <button class="text-red-600 dark:text-red-400 text-sm" onclick="return confirm('Delete share?')">Delete this share</button>
           </form>
         </div>
       </div>

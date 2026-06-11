@@ -38,18 +38,31 @@ type SharedFile struct {
 }
 
 func (f *SharedFile) Active() bool {
-	return time.Now().UTC().Before(f.ExpiresAt) && f.DownloadCount < f.MaxDownloads
+	now := time.Now().UTC()
+	downloadsOk := f.MaxDownloads == 0 || f.DownloadCount < f.MaxDownloads
+	expiresOk := f.TTLHours == 0 || now.Before(f.ExpiresAt)
+	return downloadsOk && expiresOk
 }
 
 func (f *SharedFile) Expired() bool {
-	return time.Now().UTC().After(f.ExpiresAt) || f.ExpiresAt.Equal(time.Now().UTC())
+	if f.TTLHours == 0 {
+		return false
+	}
+	now := time.Now().UTC()
+	return now.After(f.ExpiresAt) || now.Equal(f.ExpiresAt)
 }
 
 func (f *SharedFile) Exhausted() bool {
+	if f.MaxDownloads == 0 {
+		return false
+	}
 	return f.DownloadCount >= f.MaxDownloads
 }
 
 func (f *SharedFile) DownloadsRemaining() int {
+	if f.MaxDownloads == 0 {
+		return 0 // caller checks MaxDownloads == 0 to mean unlimited
+	}
 	r := f.MaxDownloads - f.DownloadCount
 	if r < 0 {
 		return 0
@@ -58,6 +71,9 @@ func (f *SharedFile) DownloadsRemaining() int {
 }
 
 func (f *SharedFile) TimeRemaining() time.Duration {
+	if f.TTLHours == 0 {
+		return time.Hour * 24 * 365 * 100 // very long for "never"
+	}
 	rem := time.Until(f.ExpiresAt)
 	if rem < 0 {
 		return 0
@@ -132,7 +148,12 @@ func CreateSharedFileFromUpload(db *sql.DB, userID int64, originalName string, c
 	}
 
 	now := time.Now().UTC()
-	expires := now.Add(time.Duration(ttl) * time.Hour)
+	var expires time.Time
+	if ttl == 0 {
+		expires = time.Date(9999, 1, 1, 0, 0, 0, 0, time.UTC)
+	} else {
+		expires = now.Add(time.Duration(ttl) * time.Hour)
+	}
 
 	// storage key: uploads/<random or hash prefix>
 	key := fmt.Sprintf("uploads/%s", hash[:12]) // short unique under uploads/
@@ -218,7 +239,7 @@ func FindSharedFilesByUser(db *sql.DB, userID int64, activeOnly bool) ([]*Shared
 		FROM shared_files WHERE user_id = ?
 	`
 	if activeOnly {
-		q += ` AND expires_at > ? AND download_count < max_downloads`
+		q += ` AND (max_downloads = 0 OR download_count < max_downloads) AND (ttl_hours = 0 OR expires_at > ?)`
 	}
 	q += ` ORDER BY created_at DESC`
 
@@ -252,7 +273,7 @@ func (f *SharedFile) IncrementDownload(db *sql.DB) (bool, error) {
 	res, err := db.Exec(`
 		UPDATE shared_files
 		SET download_count = download_count + 1, updated_at = ?
-		WHERE id = ? AND download_count < max_downloads AND expires_at > ?`,
+		WHERE id = ? AND (max_downloads = 0 OR download_count < max_downloads) AND (ttl_hours = 0 OR expires_at > ? )`,
 		time.Now().UTC(), f.ID, time.Now().UTC())
 	if err != nil {
 		return false, err

@@ -198,7 +198,7 @@ func runCleanup(sqlDB *sql.DB, storage string, stop <-chan struct{}) {
 
 func cleanupExpired(sqlDB *sql.DB, storage string) {
 	now := time.Now().UTC()
-	rows, err := sqlDB.Query(`SELECT id, storage_key FROM shared_files WHERE expires_at <= ? OR download_count >= max_downloads`, now)
+	rows, err := sqlDB.Query(`SELECT id, storage_key FROM shared_files WHERE (ttl_hours != 0 AND expires_at <= ?) OR (max_downloads != 0 AND download_count >= max_downloads)`, now)
 	if err != nil {
 		return
 	}

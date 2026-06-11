@@ -11,17 +11,17 @@
     <div class="text-center">
       <div class="mx-auto mb-4 text-5xl">📄</div>
       <h1 class="font-semibold text-xl break-all">{{ .File.OriginalFilename }}</h1>
-      <p class="text-sm text-zinc-500 mt-1">{{ .File.ContentType }} · {{ .File.FileSize }} bytes</p>
+      <p class="text-sm text-zinc-500 dark:text-zinc-400 mt-1">{{ .File.ContentType }} · {{ .File.FileSize }} bytes</p>
     </div>
 
     <div class="my-6 text-sm grid grid-cols-2 gap-3">
       <div class="bg-zinc-100 dark:bg-zinc-800 rounded p-3">
-        <div class="text-zinc-500 text-xs">Expires</div>
-        <div class="font-medium">{{ .File.ExpiresAt.Format "2006-01-02 15:04 MST" }}</div>
+        <div class="text-zinc-500 dark:text-zinc-400 text-xs">Expires</div>
+        <div class="font-medium">{{ if eq .File.TTLHours 0 }}never{{ else }}{{ .File.ExpiresAt.Format "2006-01-02 15:04 MST" }}{{ end }}</div>
       </div>
       <div class="bg-zinc-100 dark:bg-zinc-800 rounded p-3">
-        <div class="text-zinc-500 text-xs">Downloads left</div>
-        <div class="font-medium">{{ .File.DownloadsRemaining }} / {{ .File.MaxDownloads }}</div>
+        <div class="text-zinc-500 dark:text-zinc-400 text-xs">Downloads left</div>
+        <div class="font-medium">{{ if eq .File.MaxDownloads 0 }}unlimited{{ else }}{{ .File.DownloadsRemaining }} / {{ .File.MaxDownloads }}{{ end }}</div>
       </div>
     </div>
 
@@ -29,7 +29,7 @@
       <button class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition text-white font-semibold rounded-2xl">Download file</button>
     </form>
 
-    <p class="text-center text-xs text-zinc-400 mt-4">This link will stop working once the download limit or time is reached.</p>
+    <p class="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-4">This link will stop working once the download limit or time is reached.</p>
 
     {{ if .File.IsPreviewable }}
     <div class="mt-4">
