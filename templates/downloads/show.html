@@ -3,10 +3,9 @@
 <head>
   <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{{ .Title }}</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Silence the "do not use CDN in production" warning from the Tailwind Play CDN.
-       This app intentionally uses the CDN for zero-build-step nice styling. -->
+  <!-- Suppress the Tailwind CDN production warning *before* loading the script, so the initial warning from the CDN is caught. -->
   <script>!function(){var w=console.warn;console.warn=function(m){if(m&&m.toString().indexOf('cdn.tailwindcss.com')!==-1)return;w.apply(console,arguments);}}(console.warn);</script>
+  <script src="https://cdn.tailwindcss.com"></script>
   <link rel="icon" href="/icons/icon.png">
 </head>
 <body class="min-h-screen bg-zinc-50 dark:bg-zinc-950 flex items-center justify-center p-6">
