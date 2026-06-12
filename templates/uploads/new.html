@@ -222,7 +222,17 @@
     input.onchange = () => {
       clearError();
       if (input.files.length === 1) {
-        showPreview(input.files[0]);
+        const f = input.files[0];
+        const maxStr = form ? form.getAttribute('data-max-upload') : '';
+        if (maxStr) {
+          const mb = parseInt(maxStr, 10);
+          if (!isNaN(mb) && f.size > mb) {
+            showError('The file is too large. The maximum allowed upload size is ' + formatBytes(mb) + '.');
+            input.value = ''; // do not attach too-large file
+            return;
+          }
+        }
+        showPreview(f);
       } else if (input.files.length > 1) {
         showError('Only a single file can be uploaded at a time.');
         input.value = ''; // clear the multi selection
@@ -271,6 +281,16 @@
         return;
       }
 
+      // Client-side size validation on drop (same as onchange and submit)
+      const maxStr = form ? form.getAttribute('data-max-upload') : '';
+      if (maxStr) {
+        const mb = parseInt(maxStr, 10);
+        if (!isNaN(mb) && file.size > mb) {
+          showError('The file is too large. The maximum allowed upload size is ' + formatBytes(mb) + '.');
+          return; // do not attach
+        }
+      }
+
       setSingleFile(file);
       showPreview(file);
     };
@@ -282,6 +302,17 @@
         if (!file || input.files.length !== 1) {
           showError('Please select exactly one file.');
           return; // do not submit
+        }
+
+        // Client-side size check using the max from the form (prevents sending
+        // obviously-too-large files and gives immediate feedback).
+        const maxStr = form.getAttribute('data-max-upload');
+        if (maxStr) {
+          const maxBytes = parseInt(maxStr, 10);
+          if (!isNaN(maxBytes) && file.size > maxBytes) {
+            showError('The file is too large. The maximum allowed upload size is ' + formatBytes(maxBytes) + '.');
+            return;
+          }
         }
 
         e.preventDefault();
@@ -331,18 +362,17 @@
             const rt = (xhr.responseText || '').trim();
 
             if (xhr.status === 413) {
-              // Special case for payload too large — use the limit shown in the UI.
-              const max = form ? (form.getAttribute('data-max-upload') || '') : '';
-              let human = 'the configured limit';
-              if (max) {
-                const n = parseInt(max, 10);
-                if (n >= 1024*1024*1024) {
-                  human = (n / (1024*1024*1024)).toFixed(1) + ' GB';
-                } else {
-                  human = (n / (1024*1024)).toFixed(0) + ' MB';
-                }
+              // 413 can come from our MaxBytesReader (if file actually exceeded)
+              // or from a reverse proxy (nginx, Cloudflare, etc.) whose body size
+              // limit is lower than the app's. Since we now do client-side check,
+              // a 413 on the wire usually means external limit or other issue.
+              const maxStr = form ? form.getAttribute('data-max-upload') : '';
+              let hint = '';
+              if (maxStr) {
+                hint = ' (app limit: ' + formatBytes(parseInt(maxStr, 10)) + ')';
               }
-              msg = 'The file is too large. The maximum allowed upload size is ' + human + '.';
+              msg = 'The server rejected the upload as too large (HTTP 413).' + hint +
+                    ' This is often caused by a reverse proxy in front of the app having a lower client body size limit. Check your proxy config or try a smaller file.';
             } else {
               try {
                 const parser = new DOMParser();
