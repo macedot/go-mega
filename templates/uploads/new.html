@@ -52,7 +52,7 @@
         {{ if .Error }}{{ .Error }}{{ end }}
       </div>
 
-      <form method="post" action="/uploads" enctype="multipart/form-data" id="upload-form" class="space-y-6" data-max-upload="{{ .MaxUpload }}">
+      <form method="post" action="/uploads" enctype="multipart/form-data" id="upload-form" class="space-y-6" data-max-upload="{{ .MaxUpload }}" data-chunk-size="{{ .ChunkSize }}">
         <input type="hidden" name="_csrf" value="{{ .CSRF }}">
         <!-- Drop zone -->
         <div id="dropzone"
@@ -294,7 +294,10 @@
       showPreview(file);
     };
 
-    // Proper upload progress via XHR (works for the current direct multipart upload)
+    // Proper upload progress via XHR.
+    // For files <= chunk size we do a single direct multipart POST (original fast path).
+    // For larger files we do Cloudflare-friendly chunked upload (browser splits the file
+    // into small pieces < chunkSize, posts them one-by-one, server merges on /complete).
     if (form) {
       form.addEventListener('submit', function (e) {
         const file = input.files && input.files[0];
@@ -303,98 +306,276 @@
           return; // do not submit
         }
 
-        // Client-side size check using the max from the form (prevents sending
-        // obviously-too-large files and gives immediate feedback).
+        // Client-side size check (using the app-advertised limit from the form).
         const maxStr = form.getAttribute('data-max-upload');
+        let maxBytes = 0;
         if (maxStr) {
-          const maxBytes = parseInt(maxStr, 10);
+          maxBytes = parseInt(maxStr, 10);
           if (!isNaN(maxBytes) && file.size > maxBytes) {
             showError('The file is too large. The maximum allowed upload size is ' + formatBytes(maxBytes) + '.');
             return;
           }
         }
 
-        e.preventDefault();
+        const chunkSizeStr = form.getAttribute('data-chunk-size');
+        const chunkSize = chunkSizeStr ? parseInt(chunkSizeStr, 10) : (90 * 1024 * 1024);
 
-        // hide previous errors and show progress UI
-        if (uploadError) uploadError.classList.add('hidden');
-        if (progress) progress.classList.remove('hidden');
-        if (bar) bar.style.width = '0%';
-        if (text) text.textContent = 'Uploading 0%';
-        if (submitBtn) submitBtn.disabled = true;
+        if (file.size <= chunkSize || !chunkSizeStr) {
+          // === Direct (small file) path - original behavior ===
+          e.preventDefault();
 
-        // Hide the download limit / expiry controls and the submit button during the
-        // (potentially long) upload so the progress bar + "Uploading X%" / "Processing..."
-        // is the only thing visible. This makes large/slow uploads feel less "stuck"
-        // and cluttered. Controls are restored by resetUploadUI / showPreview on error
-        // or new file selection. (On success we do a full page reload anyway.)
-        const optionsGrid = form.querySelector('.grid');
-        if (optionsGrid) optionsGrid.style.display = 'none';
-        const adminNote = form.querySelector('p.text-\\[10px\\]');
-        if (adminNote) adminNote.style.display = 'none';
-        if (submitBtn) submitBtn.style.display = 'none';
+          if (uploadError) uploadError.classList.add('hidden');
+          if (progress) progress.classList.remove('hidden');
+          if (bar) bar.style.width = '0%';
+          if (text) text.textContent = 'Uploading 0%';
+          if (submitBtn) submitBtn.disabled = true;
 
-        const formData = new FormData(form);
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', form.action, true);
+          const optionsGrid = form.querySelector('.grid');
+          if (optionsGrid) optionsGrid.style.display = 'none';
+          const adminNote = form.querySelector('p.text-\\[10px\\]');
+          if (adminNote) adminNote.style.display = 'none';
+          if (submitBtn) submitBtn.style.display = 'none';
 
-        xhr.upload.onprogress = function (evt) {
-          if (evt.lengthComputable && bar && text) {
-            const pct = Math.round((evt.loaded / evt.total) * 100);
-            bar.style.width = pct + '%';
-            text.textContent = 'Uploading ' + pct + '%';
-            if (pct >= 100 && text) {
-              text.textContent = 'Processing...';
-            }
-          }
-        };
+          const formData = new FormData(form);
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', form.action, true);
 
-        xhr.onload = function () {
-          if (xhr.status >= 200 && xhr.status < 400) {
-            // success (server does 303 redirect on OK). Go to the uploads list
-            // so the new share appears in the active files section.
-            window.location.href = '/uploads/new';
-          } else {
-            // error: server returned non-success status (e.g. 422 validation error,
-            // 403 CSRF, 400, 500 etc). Try hard to extract a useful message.
-            let msg = `Upload failed (HTTP ${xhr.status}). Please try again.`;
-            const rt = (xhr.responseText || '').trim();
-
-            if (xhr.status === 413) {
-              // 413 can come from our MaxBytesReader (if file actually exceeded)
-              // or from a reverse proxy (nginx, Cloudflare, etc.) whose body size
-              // limit is lower than the app's. Since we now do client-side check,
-              // a 413 on the wire usually means external limit or other issue.
-              const maxStr = form ? form.getAttribute('data-max-upload') : '';
-              let hint = '';
-              if (maxStr) {
-                hint = ' (app limit: ' + formatBytes(parseInt(maxStr, 10)) + ')';
+          xhr.upload.onprogress = function (evt) {
+            if (evt.lengthComputable && bar && text) {
+              const pct = Math.round((evt.loaded / evt.total) * 100);
+              bar.style.width = pct + '%';
+              text.textContent = 'Uploading ' + pct + '%';
+              if (pct >= 100 && text) {
+                text.textContent = 'Processing...';
               }
-              msg = 'The server rejected the upload as too large (HTTP 413).' + hint +
-                    ' This is often caused by a reverse proxy in front of the app having a lower client body size limit. Check your proxy config or try a smaller file.';
+            }
+          };
+
+          xhr.onload = function () {
+            if (xhr.status >= 200 && xhr.status < 400) {
+              window.location.href = '/uploads/new';
             } else {
+              let msg = `Upload failed (HTTP ${xhr.status}). Please try again.`;
+              const rt = (xhr.responseText || '').trim();
+
+              if (xhr.status === 413) {
+                const maxStr2 = form ? form.getAttribute('data-max-upload') : '';
+                let hint = '';
+                if (maxStr2) {
+                  hint = ' (app limit: ' + formatBytes(parseInt(maxStr2, 10)) + ')';
+                }
+                msg = 'The server rejected the upload as too large (HTTP 413).' + hint +
+                      ' This is often caused by a reverse proxy in front of the app having a lower client body size limit. Check your proxy config or try a smaller file.';
+              } else {
+                try {
+                  const parser = new DOMParser();
+                  const doc = parser.parseFromString(rt || '', 'text/html');
+                  const errEl = doc.getElementById('upload-error') ||
+                                doc.querySelector('.bg-red-50') ||
+                                doc.querySelector('[id*="error"]');
+                  if (errEl && errEl.textContent && errEl.textContent.trim()) {
+                    msg = errEl.textContent.trim();
+                  } else if (rt.length > 0 && rt.length < 600 && !/<[a-z][\s>]/i.test(rt)) {
+                    msg = rt;
+                  }
+                } catch (_) {
+                  if (rt.length > 0 && rt.length < 600) {
+                    msg = rt;
+                  }
+                }
+              }
+
+              console.error('Upload XHR failed', xhr.status, rt);
+
+              if (uploadError) {
+                uploadError.textContent = msg;
+                uploadError.classList.remove('hidden');
+              } else {
+                alert(msg);
+              }
+              resetUploadUI();
+            }
+          };
+
+          xhr.onerror = function () {
+            if (uploadError) {
+              uploadError.textContent = 'Network error during upload.';
+              uploadError.classList.remove('hidden');
+            } else {
+              alert('Network error during upload.');
+            }
+            resetUploadUI();
+          };
+
+          xhr.send(formData);
+        } else {
+          // === Chunked path (Cloudflare-friendly) ===
+          e.preventDefault();
+
+          if (uploadError) uploadError.classList.add('hidden');
+          if (progress) progress.classList.remove('hidden');
+          if (bar) bar.style.width = '0%';
+          if (text) text.textContent = 'Starting upload...';
+          if (submitBtn) submitBtn.disabled = true;
+
+          const optionsGrid = form.querySelector('.grid');
+          if (optionsGrid) optionsGrid.style.display = 'none';
+          const adminNote = form.querySelector('p.text-\\[10px\\]');
+          if (adminNote) adminNote.style.display = 'none';
+          if (submitBtn) submitBtn.style.display = 'none';
+
+          // 1. Start the chunked session (send metadata only, get upload_id)
+          const startFD = new FormData();
+          startFD.append('filename', file.name);
+          startFD.append('size', file.size.toString());
+          startFD.append('max_downloads', form.elements['max_downloads'] ? form.elements['max_downloads'].value : '5');
+          startFD.append('ttl_hours', form.elements['ttl_hours'] ? form.elements['ttl_hours'].value : '24');
+          const csrfInput = form.querySelector('input[name="_csrf"]');
+          if (csrfInput) startFD.append('_csrf', csrfInput.value);
+
+          const startXHR = new XMLHttpRequest();
+          startXHR.open('POST', '/uploads/start', true);
+
+          startXHR.onload = function () {
+            if (startXHR.status >= 200 && startXHR.status < 400) {
+              let uploadId = '';
+              try {
+                const j = JSON.parse(startXHR.responseText || '{}');
+                uploadId = j.upload_id || '';
+              } catch (e) {}
+              if (!uploadId) {
+                showError('Failed to start chunked upload.');
+                resetUploadUI();
+                return;
+              }
+              // 2. Upload chunks sequentially
+              doChunkedUpload(file, uploadId, chunkSize);
+            } else {
+              let msg = `Upload failed (HTTP ${startXHR.status}). Please try again.`;
+              const rt = (startXHR.responseText || '').trim();
               try {
                 const parser = new DOMParser();
                 const doc = parser.parseFromString(rt || '', 'text/html');
-                const errEl = doc.getElementById('upload-error') ||
-                              doc.querySelector('.bg-red-50') ||
-                              doc.querySelector('[id*="error"]');
-                if (errEl && errEl.textContent && errEl.textContent.trim()) {
-                  msg = errEl.textContent.trim();
-                } else if (rt.length > 0 && rt.length < 600 && !/<[a-z][\s>]/i.test(rt)) {
-                  // plain text error from server (e.g. "invalid csrf token")
-                  msg = rt;
-                }
-              } catch (_) {
-                if (rt.length > 0 && rt.length < 600) {
-                  msg = rt;
-                }
+                const errEl = doc.getElementById('upload-error') || doc.querySelector('.bg-red-50');
+                if (errEl && errEl.textContent) msg = errEl.textContent.trim();
+              } catch (_) {}
+              console.error('Upload start failed', startXHR.status, rt);
+              if (uploadError) {
+                uploadError.textContent = msg;
+                uploadError.classList.remove('hidden');
+              } else {
+                alert(msg);
               }
+              resetUploadUI();
             }
+          };
+          startXHR.onerror = function () {
+            if (uploadError) {
+              uploadError.textContent = 'Network error starting upload.';
+              uploadError.classList.remove('hidden');
+            } else {
+              alert('Network error starting upload.');
+            }
+            resetUploadUI();
+          };
+          startXHR.send(startFD);
+        }
+      });
+    }
 
-            // Log for debugging (open DevTools console if you keep seeing generic errors)
-            console.error('Upload XHR failed', xhr.status, rt);
+    // Chunked upload implementation (used when file > chunk size).
+    // Posts one chunk at a time to /uploads/chunk, then calls /uploads/complete.
+    function doChunkedUpload(file, uploadId, chunkSize) {
+      const totalChunks = Math.ceil(file.size / chunkSize);
+      let currentChunk = 0;
 
+      function uploadNextChunk() {
+        if (currentChunk >= totalChunks) {
+          // All chunks sent - tell server to merge + create the share record.
+          if (text) text.textContent = 'Processing...';
+          const completeFD = new FormData();
+          completeFD.append('upload_id', uploadId);
+          const csrfInput = form.querySelector('input[name="_csrf"]');
+          if (csrfInput) completeFD.append('_csrf', csrfInput.value);
+
+          const compXHR = new XMLHttpRequest();
+          compXHR.open('POST', '/uploads/complete', true);
+          compXHR.onload = function () {
+            if (compXHR.status >= 200 && compXHR.status < 400) {
+              window.location.href = '/uploads/new';
+            } else {
+              let msg = `Upload failed (HTTP ${compXHR.status}). Please try again.`;
+              const rt = (compXHR.responseText || '').trim();
+              try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(rt || '', 'text/html');
+                const errEl = doc.getElementById('upload-error') || doc.querySelector('.bg-red-50');
+                if (errEl && errEl.textContent) msg = errEl.textContent.trim();
+              } catch (_) {}
+              console.error('Upload complete failed', compXHR.status, rt);
+              if (uploadError) {
+                uploadError.textContent = msg;
+                uploadError.classList.remove('hidden');
+              } else {
+                alert(msg);
+              }
+              resetUploadUI();
+            }
+          };
+          compXHR.onerror = function () {
+            if (uploadError) {
+              uploadError.textContent = 'Network error finalizing upload.';
+              uploadError.classList.remove('hidden');
+            } else {
+              alert('Network error finalizing upload.');
+            }
+            resetUploadUI();
+          };
+          compXHR.send(completeFD);
+          return;
+        }
+
+        const start = currentChunk * chunkSize;
+        const end = Math.min(start + chunkSize, file.size);
+        const chunkBlob = file.slice(start, end, file.type || 'application/octet-stream');
+
+        const chunkFD = new FormData();
+        chunkFD.append('upload_id', uploadId);
+        chunkFD.append('chunk_index', currentChunk.toString());
+        chunkFD.append('total_chunks', totalChunks.toString());
+        chunkFD.append('file', chunkBlob);
+        const csrfInput = form.querySelector('input[name="_csrf"]');
+        if (csrfInput) chunkFD.append('_csrf', csrfInput.value);
+
+        const chunkXHR = new XMLHttpRequest();
+        chunkXHR.open('POST', '/uploads/chunk', true);
+
+        chunkXHR.upload.onprogress = function (evt) {
+          if (evt.lengthComputable && bar && text) {
+            const chunkPct = evt.loaded / evt.total;
+            const overall = ((currentChunk + chunkPct) / totalChunks) * 100;
+            bar.style.width = Math.round(overall) + '%';
+            text.textContent = 'Uploading ' + Math.round(overall) + '% (chunk ' + (currentChunk + 1) + '/' + totalChunks + ')';
+          }
+        };
+
+        chunkXHR.onload = function () {
+          if (chunkXHR.status >= 200 && chunkXHR.status < 400) {
+            currentChunk++;
+            const overall = (currentChunk / totalChunks) * 100;
+            bar.style.width = Math.round(overall) + '%';
+            text.textContent = 'Uploading ' + Math.round(overall) + '% (chunk ' + currentChunk + '/' + totalChunks + ')';
+            uploadNextChunk();
+          } else {
+            let msg = `Chunk upload failed (HTTP ${chunkXHR.status}).`;
+            const rt = (chunkXHR.responseText || '').trim();
+            try {
+              const parser = new DOMParser();
+              const doc = parser.parseFromString(rt || '', 'text/html');
+              const errEl = doc.getElementById('upload-error') || doc.querySelector('.bg-red-50');
+              if (errEl && errEl.textContent) msg = errEl.textContent.trim();
+            } catch (_) {}
+            console.error('Chunk upload failed', chunkXHR.status, rt);
             if (uploadError) {
               uploadError.textContent = msg;
               uploadError.classList.remove('hidden');
@@ -405,18 +586,22 @@
           }
         };
 
-        xhr.onerror = function () {
+        chunkXHR.onerror = function () {
           if (uploadError) {
-            uploadError.textContent = 'Network error during upload.';
+            uploadError.textContent = 'Network error uploading chunk.';
             uploadError.classList.remove('hidden');
           } else {
-            alert('Network error during upload.');
+            alert('Network error uploading chunk.');
           }
           resetUploadUI();
         };
 
-        xhr.send(formData);
-      });
+        chunkXHR.send(chunkFD);
+      }
+
+      // Kick off the first chunk.
+      if (text) text.textContent = 'Uploading 0% (chunk 1/' + totalChunks + ')';
+      uploadNextChunk();
     }
   </script>
 </body>

@@ -98,6 +98,11 @@ func main() {
 		r.Use(auth.RequireAuth)
 		r.Get("/uploads/new", handlers.HandleUploadNew(tmpl, sqlDB))
 		r.Post("/uploads", handlers.HandleUploadCreate(tmpl, sqlDB))
+		// Chunked upload support for Cloudflare compatibility (large files are split in the browser
+		// into small chunks < ~90MB so they pass CF's body size limit, then merged server-side).
+		r.Post("/uploads/start", handlers.HandleUploadStart(tmpl, sqlDB))
+		r.Post("/uploads/chunk", handlers.HandleUploadChunk(tmpl, sqlDB))
+		r.Post("/uploads/complete", handlers.HandleUploadComplete(tmpl, sqlDB))
 		r.Get("/uploads/{id}", handlers.HandleUploadShow(tmpl, sqlDB))
 		r.Post("/uploads/{id}/delete", handlers.HandleUploadDelete(sqlDB))
 
