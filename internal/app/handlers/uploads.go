@@ -59,13 +59,57 @@ func HandleUploadCreate(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 			http.Redirect(w, r, "/session/new", http.StatusSeeOther)
 			return
 		}
+
+		// Enforce the configured upload size limit at the HTTP layer *before* we
+		// start receiving the body. This makes the server return a clean 413
+		// (Payload Too Large) instead of letting a huge file consume temp disk or
+		// memory, and before we do any expensive work.
+		maxUpload := config.Cfg.Security.MaxUploadSizeBytes
+		if maxUpload <= 0 {
+			maxUpload = 1 << 30 // 1 GiB safe fallback
+		}
+		// Give a bit of headroom for the small form fields (_csrf, max_downloads,
+		// ttl_hours) + multipart framing.
+		maxBody := maxUpload + (64 << 20)
+		r.Body = http.MaxBytesReader(w, r.Body, maxBody)
+
+		// Parse the multipart form early (this receives the body, including large
+		// uploaded files to a temp file). We do this before CSRF verification so that
+		// VerifyCSRF's r.FormValue("_csrf") is guaranteed to see the value, and so
+		// the subsequent single-file count check has r.MultipartForm populated.
+		r.ParseMultipartForm(32 << 20) // 32MB buffer
+
 		if !auth.VerifyCSRF(r) {
-			http.Error(w, "invalid csrf token", http.StatusForbidden)
+			// Render a proper error page (instead of plain text) so the XHR client
+			// can extract and display the real message instead of the generic fallback.
+			used, _ := user.StorageUsed(sqlDB)
+			active, _ := models.FindSharedFilesByUser(sqlDB, user.ID, true)
+			inactive, _ := models.FindSharedFilesByUser(sqlDB, user.ID, false)
+			pct := 0
+			quota := user.DiskQuota()
+			if quota > 0 {
+				pct = int(float64(used) / float64(quota) * 100)
+				if pct > 100 {
+					pct = 100
+				}
+			}
+			data := map[string]interface{}{
+				"Title":         "Upload — go-mega",
+				"ActiveFiles":   active,
+				"InactiveFiles": inactive,
+				"StorageUsed":   used,
+				"DiskQuota":     quota,
+				"QuotaPct":      pct,
+				"MaxUpload":     config.Cfg.Security.MaxUploadSizeBytes,
+				"Error":         "Invalid CSRF token. Please reload the page and try again.",
+				"Authenticated": true,
+				"IsAdmin":       user.IsAdmin(),
+				"CSRF":          auth.EnsureCSRF(w, r),
+			}
+			w.WriteHeader(http.StatusForbidden)
+			render(w, t, "uploads/new.html", data)
 			return
 		}
-
-		// multipart
-		r.ParseMultipartForm(32 << 20) // 32MB buffer
 
 		// Security: enforce single file only (client can be bypassed; folders and
 		// multi-file posts via curl or modified forms must be rejected here).
@@ -101,7 +145,33 @@ func HandleUploadCreate(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 
 		f, fh, err := r.FormFile("file")
 		if err != nil {
-			http.Error(w, "file required", http.StatusBadRequest)
+			// Render nicely (instead of plain text) for consistent XHR error handling.
+			used, _ := user.StorageUsed(sqlDB)
+			active, _ := models.FindSharedFilesByUser(sqlDB, user.ID, true)
+			inactive, _ := models.FindSharedFilesByUser(sqlDB, user.ID, false)
+			pct := 0
+			quota := user.DiskQuota()
+			if quota > 0 {
+				pct = int(float64(used) / float64(quota) * 100)
+				if pct > 100 {
+					pct = 100
+				}
+			}
+			data := map[string]interface{}{
+				"Title":         "Upload — go-mega",
+				"ActiveFiles":   active,
+				"InactiveFiles": inactive,
+				"StorageUsed":   used,
+				"DiskQuota":     quota,
+				"QuotaPct":      pct,
+				"MaxUpload":     config.Cfg.Security.MaxUploadSizeBytes,
+				"Error":         "file required",
+				"Authenticated": true,
+				"IsAdmin":       user.IsAdmin(),
+				"CSRF":          auth.EnsureCSRF(w, r),
+			}
+			w.WriteHeader(http.StatusBadRequest)
+			render(w, t, "uploads/new.html", data)
 			return
 		}
 		defer f.Close()

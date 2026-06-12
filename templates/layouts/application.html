@@ -7,6 +7,9 @@
   <link rel="icon" href="/icons/icon.png" type="image/png">
   <link rel="stylesheet" href="/static/css/app.css">
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Silence the "do not use CDN in production" warning from the Tailwind Play CDN.
+       This app intentionally uses the CDN for zero-build-step nice styling. -->
+  <script>!function(){var w=console.warn;console.warn=function(m){if(m&&m.toString().indexOf('cdn.tailwindcss.com')!==-1)return;w.apply(console,arguments);}}(console.warn);</script>
   <script>
     // Tailwind script play for runtime + dark
     function initTheme() {

@@ -5,6 +5,9 @@
   <meta name="viewport" content="width=device-width,initial-scale=1">
   <title>{{ .Title }}</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Silence the "do not use CDN in production" warning from the Tailwind Play CDN.
+       This app intentionally uses the CDN for zero-build-step nice styling. -->
+  <script>!function(){var w=console.warn;console.warn=function(m){if(m&&m.toString().indexOf('cdn.tailwindcss.com')!==-1)return;w.apply(console,arguments);}}(console.warn);</script>
   <link rel="icon" href="/icons/icon.png">
   <style>
     .dropzone { transition: all .1s ease }
@@ -12,6 +15,7 @@
   </style>
 </head>
 <body class="h-full bg-zinc-50 dark:bg-zinc-950 text-zinc-900 dark:text-zinc-100">
+  {{ $csrf := .CSRF }}
   <nav class="fixed top-0 inset-x-0 z-50 bg-white/90 dark:bg-zinc-950/90 border-b border-zinc-200 dark:border-zinc-800 backdrop-blur">
     <div class="max-w-3xl mx-auto px-4 h-14 flex items-center justify-between">
       <div class="flex items-center gap-4">
@@ -21,7 +25,10 @@
       <div class="flex items-center gap-2 text-sm">
         <a href="/profile" class="px-3 py-1 rounded hover:bg-zinc-100 dark:hover:bg-zinc-900">Profile</a>
         <button onclick="document.documentElement.classList.toggle('dark');localStorage.theme=document.documentElement.classList.contains('dark')?'dark':'light'" class="px-2">🌓</button>
-        <form action="/logout" method="post" class="inline"><button class="text-red-600 dark:text-red-400 px-3 py-1">Logout</button></form>
+        <form action="/logout" method="post" class="inline">
+          <input type="hidden" name="_csrf" value="{{ $csrf }}">
+          <button class="text-red-600 dark:text-red-400 px-3 py-1">Logout</button>
+        </form>
       </div>
     </div>
   </nav>
@@ -88,8 +95,6 @@
         <button id="upload-submit" type="submit" class="w-full py-3.5 rounded-2xl bg-red-600 hover:bg-red-500 text-white font-semibold active:scale-[0.985] transition disabled:opacity-60">Upload &amp; generate link</button>
       </form>
     </div>
-
-    {{ $csrf := .CSRF }}
 
     <!-- Active files -->
     {{ if .ActiveFiles }}
@@ -319,17 +324,46 @@
             // so the new share appears in the active files section.
             window.location.href = '/uploads/new';
           } else {
-            // error: server returned 422 + the form HTML with the error message.
-            // Try to extract the error text so we don't lose the message.
-            let msg = 'Upload failed. Please try again.';
-            try {
-              const parser = new DOMParser();
-              const doc = parser.parseFromString(xhr.responseText || '', 'text/html');
-              const errEl = doc.getElementById('upload-error') || doc.querySelector('.bg-red-50');
-              if (errEl && errEl.textContent) {
-                msg = errEl.textContent.trim();
+            // error: server returned non-success status (e.g. 422 validation error,
+            // 403 CSRF, 400, 500 etc). Try hard to extract a useful message.
+            let msg = `Upload failed (HTTP ${xhr.status}). Please try again.`;
+            const rt = (xhr.responseText || '').trim();
+
+            if (xhr.status === 413) {
+              // Special case for payload too large — use the limit shown in the UI.
+              const max = form ? (form.getAttribute('data-max-upload') || '') : '';
+              let human = 'the configured limit';
+              if (max) {
+                const n = parseInt(max, 10);
+                if (n >= 1024*1024*1024) {
+                  human = (n / (1024*1024*1024)).toFixed(1) + ' GB';
+                } else {
+                  human = (n / (1024*1024)).toFixed(0) + ' MB';
+                }
               }
-            } catch (_) {}
+              msg = 'The file is too large. The maximum allowed upload size is ' + human + '.';
+            } else {
+              try {
+                const parser = new DOMParser();
+                const doc = parser.parseFromString(rt || '', 'text/html');
+                const errEl = doc.getElementById('upload-error') ||
+                              doc.querySelector('.bg-red-50') ||
+                              doc.querySelector('[id*="error"]');
+                if (errEl && errEl.textContent && errEl.textContent.trim()) {
+                  msg = errEl.textContent.trim();
+                } else if (rt.length > 0 && rt.length < 600 && !/<[a-z][\s>]/i.test(rt)) {
+                  // plain text error from server (e.g. "invalid csrf token")
+                  msg = rt;
+                }
+              } catch (_) {
+                if (rt.length > 0 && rt.length < 600) {
+                  msg = rt;
+                }
+              }
+            }
+
+            // Log for debugging (open DevTools console if you keep seeing generic errors)
+            console.error('Upload XHR failed', xhr.status, rt);
 
             if (uploadError) {
               uploadError.textContent = msg;
