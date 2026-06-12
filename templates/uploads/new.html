@@ -111,6 +111,7 @@
           </div>
           <div class="flex items-center gap-2">
             <a href="/d/{{ .DownloadHash }}" target="_blank" class="text-xs px-3 py-1 rounded-full border dark:border-zinc-700">Open link</a>
+            <a href="/d/{{ .DownloadHash }}/file" target="_blank" class="text-xs px-3 py-1 rounded-full border dark:border-zinc-700">Direct</a>
             <form method="post" action="/uploads/{{ .ID }}/delete" onsubmit="return confirm('Delete this share?')">
               <input type="hidden" name="_csrf" value="{{ $csrf }}">
               <button class="text-xs px-3 py-1 text-red-600 dark:text-red-400">Delete</button>

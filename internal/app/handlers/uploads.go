@@ -301,6 +301,7 @@ func HandleUploadShow(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 		if !config.Cfg.IsProd() {
 			url = "http://" + config.Cfg.Host + "/d/" + found.DownloadHash
 		}
+		directURL := url + "/file"
 		qrPNG, _ := qrcode.Encode(url, qrcode.Medium, 256)
 		qrB64 := base64.StdEncoding.EncodeToString(qrPNG)
 
@@ -308,6 +309,7 @@ func HandleUploadShow(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 			"Title":         "Share Link — go-mega",
 			"File":          found,
 			"DownloadURL":   url,
+			"DirectURL":     directURL,
 			"QR":            qrB64,
 			"Authenticated": true,
 			"CSRF":          auth.EnsureCSRF(w, r),

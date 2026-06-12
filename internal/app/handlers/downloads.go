@@ -46,23 +46,40 @@ func HandleDownloadShow(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 
 func HandleDownloadConsume(t *template.Template, sqlDB *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !auth.VerifyCSRF(r) {
-			http.Error(w, "invalid csrf token", http.StatusForbidden)
-			return
+		// CSRF is only required for POST (the two-step form on the landing page).
+		// For direct download links (GET /d/{hash}/file) we skip it — the secret hash itself
+		// provides the access control, and we still perform the consume (increment + active check).
+		if r.Method == http.MethodPost {
+			if !auth.VerifyCSRF(r) {
+				http.Error(w, "invalid csrf token", http.StatusForbidden)
+				return
+			}
 		}
 		hash := chi.URLParam(r, "hash")
 		sf, err := models.FindSharedFileByHash(sqlDB, hash)
 		if err != nil || sf == nil {
 			recordInvalidAccess(r, sqlDB)
+			if r.Method == http.MethodGet {
+				http.NotFound(w, r)
+				return
+			}
 			http.NotFound(w, r)
 			return
 		}
 		if sf.User != nil && sf.User.IsBanned() {
+			if r.Method == http.MethodGet {
+				http.Error(w, "link expired or inactive", http.StatusGone)
+				return
+			}
 			render(w, t, "downloads/expired.html", nil)
 			return
 		}
 		ok, err := sf.IncrementDownload(sqlDB)
 		if err != nil || !ok {
+			if r.Method == http.MethodGet {
+				http.Error(w, "link expired or download limit reached", http.StatusGone)
+				return
+			}
 			render(w, t, "downloads/expired.html", map[string]interface{}{"File": sf})
 			return
 		}

@@ -86,6 +86,9 @@ func main() {
 
 		// Public download (two step)
 		r.Get("/d/{hash}", handlers.HandleDownloadShow(tmpl, sqlDB))
+		// Support both POST (from landing page form, with CSRF) and GET (for direct download links)
+		// The consume logic (check active, increment count, serve file) is the same.
+		r.Get("/d/{hash}/file", handlers.HandleDownloadConsume(tmpl, sqlDB))
 		r.Post("/d/{hash}/file", handlers.HandleDownloadConsume(tmpl, sqlDB))
 		r.Get("/d/{hash}/preview", handlers.HandleDownloadPreview(sqlDB))
 	})

@@ -33,7 +33,11 @@
       <button class="w-full py-3.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 transition text-white font-semibold rounded-2xl">Download file</button>
     </form>
 
-    <p class="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-4">This link will stop working once the download limit or time is reached.</p>
+    <p class="text-center text-xs mt-2">
+      <a href="/d/{{ .File.DownloadHash }}/file" class="underline text-zinc-400 dark:text-zinc-500">Direct download link</a>
+    </p>
+
+    <p class="text-center text-xs text-zinc-400 dark:text-zinc-500 mt-1">This link will stop working once the download limit or time is reached.</p>
 
     {{ if .File.IsPreviewable }}
     <div class="mt-4">
